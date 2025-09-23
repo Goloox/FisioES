@@ -1,0 +1,143 @@
+﻿/* =========================
+   Navbar FISIOES
+   Archivo: /css/navbar.css
+   Requiere: Bootstrap 5
+   ========================= */
+
+/* Paleta base (oscura) */
+:root {
+    --nav-bg: #111827; /* gris muy oscuro */
+    --nav-bg-2: #0b1220; /* variante */
+    --nav-text: #e5e7eb; /* gris claro */
+    --nav-text-dim: #cbd5e1; /* gris medio */
+    --nav-accent: #22d3ee; /* cian suave */
+    --nav-accent-2: #60a5fa; /* azul suave */
+    --nav-border: #1f2937; /* borde tenue */
+}
+
+/* Contenedor y barra */
+.navbar.bg-dark {
+    background: linear-gradient(180deg, var(--nav-bg) 0%, var(--nav-bg-2) 100%) !important;
+    border-bottom: 1px solid var(--nav-border);
+}
+
+.navbar .container {
+    gap: .5rem;
+}
+
+/* Marca */
+.navbar-brand {
+    font-weight: 700;
+    letter-spacing: .3px;
+    color: var(--nav-text) !important;
+    display: inline-flex;
+    align-items: center;
+    gap: .5rem;
+}
+
+    .navbar-brand img {
+        height: 34px;
+        width: auto;
+        border-radius: .375rem;
+        object-fit: cover;
+    }
+
+/* Links */
+.navbar-nav .nav-link {
+    color: var(--nav-text-dim) !important;
+    font-weight: 500;
+    padding: .5rem .9rem;
+    border-radius: .5rem;
+    transition: color .2s ease, background-color .2s ease, transform .2s ease;
+}
+
+    /* Hover + focus */
+    .navbar-nav .nav-link:hover,
+    .navbar-nav .nav-link:focus {
+        color: var(--nav-text) !important;
+        background: rgba(255,255,255,.04);
+        text-decoration: none;
+    }
+
+    /* Estado activo (añade class="active" en el link actual) */
+    .navbar-nav .nav-link.active,
+    .navbar-nav .nav-link[aria-current="page"] {
+        color: var(--nav-text) !important;
+        background: linear-gradient(90deg, rgba(34,211,238,.18), rgba(96,165,250,.18));
+        outline: 1px solid rgba(34,211,238,.25);
+    }
+
+/* Toggler (hamburguesa) */
+.navbar-toggler {
+    border-color: rgba(255,255,255,.2);
+    padding: .35rem .6rem;
+    border-radius: .6rem;
+}
+
+.navbar-dark .navbar-toggler-icon {
+    filter: drop-shadow(0 0 2px rgba(0,0,0,.35));
+}
+
+/* Dropdowns (por si agregas en el futuro) */
+.navbar .dropdown-menu {
+    background: #0b1220;
+    border: 1px solid var(--nav-border);
+    box-shadow: 0 10px 30px rgba(0,0,0,.35);
+}
+
+.navbar .dropdown-item {
+    color: var(--nav-text-dim);
+}
+
+    .navbar .dropdown-item:hover,
+    .navbar .dropdown-item:focus {
+        color: var(--nav-text);
+        background: rgba(255,255,255,.06);
+    }
+
+/* Separadores entre items (opcional) */
+@media (min-width: 992px) {
+    .navbar-nav .nav-item + .nav-item {
+        margin-left: .15rem;
+    }
+}
+
+/* Tamaños y espaciados responsivos */
+.navbar {
+    min-height: 64px;
+}
+
+@media (max-width: 991.98px) {
+    .navbar-collapse {
+        padding: .5rem 0;
+        border-top: 1px solid var(--nav-border);
+        margin-top: .5rem;
+    }
+
+    .navbar-nav .nav-link {
+        padding: .6rem .8rem;
+    }
+}
+
+/* Sombra sutil cuando es sticky (si le agregas .sticky-top en el HTML) */
+.navbar.sticky-top {
+    box-shadow: 0 10px 30px rgba(0,0,0,.25);
+}
+
+/* Modo alto contraste del sistema (accesibilidad) */
+@media (prefers-contrast: more) {
+    .navbar-nav .nav-link.active {
+        outline: 1.5px solid var(--nav-accent);
+    }
+}
+
+/* Soporte a prefers-color-scheme claro (si tu sitio cambia) */
+@media (prefers-color-scheme: light) {
+    :root {
+        --nav-bg: #0f172a;
+        --nav-bg-2: #111827;
+        --nav-text: #f1f5f9;
+        --nav-text-dim: #e2e8f0;
+        --nav-border: #1f2937;
+    }
+}
