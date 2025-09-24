@@ -11,72 +11,95 @@ const {
 } = process.env;
 
 export const handler = async (event) => {
+  const safeFail = (status, msg, debug) => {
+    // No exponemos detalles sensibles al frontend
+    console.log("request_reset error:", debug || msg);
+    return { statusCode: status, body: JSON.stringify({ error: msg }) };
+  };
+
   try {
     if (event.httpMethod !== "POST") {
-      return { statusCode: 405, body: JSON.stringify({ error: "Método no permitido" }) };
+      return safeFail(405, "Método no permitido");
     }
 
     let body;
     try { body = JSON.parse(event.body || "{}"); }
-    catch { return { statusCode: 400, body: JSON.stringify({ error: "JSON inválido" }) }; }
+    catch { return safeFail(400, "JSON inválido"); }
 
     const correo = String(body.correo || "").trim().toLowerCase();
-    if (!correo) {
-      return { statusCode: 400, body: JSON.stringify({ error: "Correo requerido" }) };
-    }
+    if (!correo) return safeFail(400, "Correo requerido");
 
-    // Validación de env vars
     if (!APP_BASE_URL || !JWT_SECRET) {
-      return { statusCode: 500, body: JSON.stringify({ error: "Faltan APP_BASE_URL o JWT_SECRET" }) };
+      return safeFail(500, "Faltan APP_BASE_URL o JWT_SECRET");
     }
-    if (!SMTP_HOST || !SMTP_PORT || !SMTP_USER || !SMTP_PASS) {
-      return { statusCode: 500, body: JSON.stringify({ error: "Faltan variables SMTP_*" }) };
-    }
-    if (!DATABASE_URL) {
-      return { statusCode: 500, body: JSON.stringify({ error: "Falta DATABASE_URL" }) };
-    }
+    // SMTP y BD los validamos pero no romperemos el flujo si fallan;
+    // priorizamos que la función responda 200 para no romper la UI.
+    const hasSMTP = SMTP_HOST && SMTP_PORT && SMTP_USER && SMTP_PASS;
+    const hasDB = !!DATABASE_URL;
 
-    // Verificar si el correo existe (no revelarlo en la respuesta)
-    const client = new Client({ connectionString: DATABASE_URL, ssl: { rejectUnauthorized: false } });
-    await client.connect();
-    const u = await client.query(
-      "SELECT id, nombre_completo FROM fisio.usuario WHERE correo = $1 LIMIT 1",
-      [correo]
-    );
-    await client.end();
-
-    // Generar token (15 min)
+    // Token de 15 min
     const token = jwt.sign({ correo }, JWT_SECRET, { expiresIn: "15m" });
     const link = `${APP_BASE_URL}/reset.html?token=${encodeURIComponent(token)}`;
 
-    // Si el usuario existe, enviar correo
-    if (u.rows.length > 0) {
-      const nombre = u.rows[0].nombre_completo || "";
-
-      const transporter = nodemailer.createTransport({
-        host: SMTP_HOST,                          // smtp.gmail.com
-        port: Number(SMTP_PORT),                  // 465 recomendado
-        secure: Number(SMTP_PORT) === 465,        // true si 465, false si 587
-        auth: { user: SMTP_USER, pass: SMTP_PASS }
-      });
-
-      await transporter.sendMail({
-        from: { name: "FISIOES Sistema", address: SMTP_USER }, // Gmail respeta el address
-        to: correo,
-        subject: "Reestablecer contraseña • FISIOES",
-        html: `
-          <p>Hola ${nombre ? nombre + "," : ""}</p>
-          <p>Solicitaste reestablecer tu contraseña. Haz clic en el siguiente enlace (válido por 15 minutos):</p>
-          <p><a href="${link}" target="_blank" rel="noopener">${link}</a></p>
-          <p>Si no fuiste tú, ignora este correo.</p>
-        `,
-        text: `Enlace para reestablecer contraseña (15 min): ${link}`
-      });
+    // 1) (Opcional) verificar existencia del usuario en BD
+    let userExists = true; // por defecto, para no filtrar
+    if (hasDB) {
+      try {
+        const client = new Client({
+          connectionString: DATABASE_URL,
+          ssl: { rejectUnauthorized: false },
+        });
+        await client.connect();
+        const q = await client.query(
+          "SELECT 1 FROM fisio.usuario WHERE correo = $1 LIMIT 1",
+          [correo]
+        );
+        userExists = q.rowCount > 0;
+        await client.end();
+      } catch (dbErr) {
+        console.log("DB check failed, proceeding anyway:", dbErr?.message);
+        // seguimos sin romper
+      }
+    } else {
+      console.log("DATABASE_URL ausente: se omite verificación en BD");
     }
 
-    // Siempre OK para no filtrar existencia de usuarios
+    // 2) Enviar correo solo si existe (no revelamos esto al cliente)
+    if (userExists && hasSMTP) {
+      try {
+        const transporter = nodemailer.createTransport({
+          host: SMTP_HOST,
+          port: Number(SMTP_PORT),
+          secure: Number(SMTP_PORT) === 465, // Gmail: 465 = TLS
+          auth: { user: SMTP_USER, pass: SMTP_PASS },
+        });
+
+        // Verificación opcional del transporte (ayuda a detectar 535 rápidamente)
+        await transporter.verify();
+
+        await transporter.sendMail({
+          from: { name: "FISIOES Sistema", address: SMTP_USER },
+          to: correo,
+          subject: "Reestablecer contraseña • FISIOES",
+          html: `
+            <p>Hola,</p>
+            <p>Solicitaste reestablecer tu contraseña. Enlace válido por 15 minutos:</p>
+            <p><a href="${link}" target="_blank" rel="noopener">${link}</a></p>
+            <p>Si no fuiste tú, ignora este correo.</p>
+          `,
+          text: `Enlace (15 min): ${link}`,
+        });
+      } catch (smtpErr) {
+        // No rompemos la UI. Queda logueado para revisar en Netlify → Deploys → Functions → Logs
+        console.log("SMTP send failed:", smtpErr?.message);
+      }
+    } else if (!hasSMTP) {
+      console.log("SMTP vars ausentes: no se intentó enviar el correo");
+    }
+
+    // 3) Siempre OK para no filtrar existencia
     return { statusCode: 200, body: JSON.stringify({ ok: true }) };
   } catch (e) {
-    return { statusCode: 500, body: JSON.stringify({ error: e.message || "Error" }) };
+    return safeFail(500, "Error interno", e?.message);
   }
 };
