@@ -13,14 +13,6 @@ export const handler = async (event) => {
       return { statusCode: 400, body: JSON.stringify({ error: "Correo y captcha requeridos" }) };
     }
 
-    // 1) Verificar reCAPTCHA
-    const verify = await fetch(`https://www.google.com/recaptcha/api/siteverify`, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ secret: RECAPTCHA_SECRET, response: captcha }),
-    });
-    const cap = await verify.json();
-    if (!cap.success) return { statusCode: 400, body: JSON.stringify({ error: "Captcha inválido" }) };
 
     // 2) Generar token reset válido 15 min
     const token = jwt.sign({ correo }, JWT_SECRET, { expiresIn: "15m" });
