@@ -44,7 +44,7 @@ export const handler = async (event) => {
 
     // 1) Verificar JWT (solo si SIGNIN_REQUIRE_JWT está en "true")
     let claims = {};
-    if (SIGNIN_REQUIRE_JWT === "true") {
+    if (SIGNIN_REQUIRE_JWT && SIGNIN_REQUIRE_JWT.toLowerCase() === "true") {
       if (!STACK_JWKS_URL) {
         return {
           statusCode: 500,
@@ -96,7 +96,6 @@ export const handler = async (event) => {
           rol_id: 2,
           activo: 1,
           contrasena_hash: hashBytea,
-          // auth_sub: claims.sub // futuro si activas Stack Auth
         },
       ]),
     });
