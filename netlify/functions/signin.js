@@ -1,7 +1,7 @@
 import bcrypt from "bcryptjs";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 
-const { NEON_REST_URL, NEON_API_KEY, STACK_JWKS_URL } = process.env;
+const { NEON_REST_URL, NEON_API_KEY, STACK_JWKS_URL, SIGNIN_REQUIRE_JWT } = process.env;
 
 /**
  * Convierte un string a formato bytea hex para Postgres
@@ -12,7 +12,7 @@ function toByteaHex(str) {
 }
 
 /**
- * Verifica JWT de Stack Auth
+ * Verifica JWT de Stack Auth (solo si está habilitado)
  */
 async function verifyToken(authorization) {
   if (!authorization?.startsWith("Bearer ")) {
@@ -21,9 +21,9 @@ async function verifyToken(authorization) {
   const token = authorization.slice("Bearer ".length).trim();
   const JWKS = createRemoteJWKSet(new URL(STACK_JWKS_URL));
   const { payload } = await jwtVerify(token, JWKS, {
-    algorithms: ["ES256"], // tus llaves son P-256 ES256
+    algorithms: ["ES256"],
   });
-  return payload; // sub, email, etc.
+  return payload;
 }
 
 /**
@@ -32,10 +32,7 @@ async function verifyToken(authorization) {
 export const handler = async (event) => {
   try {
     if (event.httpMethod !== "POST") {
-      return {
-        statusCode: 405,
-        body: JSON.stringify({ error: "Method Not Allowed" }),
-      };
+      return { statusCode: 405, body: JSON.stringify({ error: "Method Not Allowed" }) };
     }
 
     if (!NEON_REST_URL || !NEON_API_KEY) {
@@ -45,17 +42,17 @@ export const handler = async (event) => {
       };
     }
 
-    if (!STACK_JWKS_URL) {
-      return {
-        statusCode: 500,
-        body: JSON.stringify({ error: "Falta STACK_JWKS_URL" }),
-      };
+    // 1) Verificar JWT (solo si SIGNIN_REQUIRE_JWT está en "true")
+    let claims = {};
+    if (SIGNIN_REQUIRE_JWT === "true") {
+      if (!STACK_JWKS_URL) {
+        return {
+          statusCode: 500,
+          body: JSON.stringify({ error: "Falta STACK_JWKS_URL" }),
+        };
+      }
+      claims = await verifyToken(event.headers.authorization || event.headers.Authorization);
     }
-
-    // 1) Verificar JWT
-    const claims = await verifyToken(
-      event.headers.authorization || event.headers.Authorization
-    );
 
     // 2) Leer body
     let body;
@@ -67,16 +64,14 @@ export const handler = async (event) => {
 
     const { nombre_completo, correo, cedula, password } = body;
     const errors = [];
-    if (!nombre_completo || nombre_completo.trim().length < 3)
-      errors.push("Nombre inválido");
-    if (!correo || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(correo))
-      errors.push("Correo inválido");
+    if (!nombre_completo || nombre_completo.trim().length < 3) errors.push("Nombre inválido");
+    if (!correo || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(correo)) errors.push("Correo inválido");
     if (!cedula || cedula.trim().length < 3) errors.push("Cédula inválida");
-    if (!password || String(password).length < 8)
-      errors.push("La contraseña debe tener al menos 8 caracteres");
+    if (!password || String(password).length < 8) errors.push("La contraseña debe tener al menos 8 caracteres");
 
-    if (errors.length)
+    if (errors.length) {
       return { statusCode: 400, body: JSON.stringify({ error: errors.join(", ") }) };
+    }
 
     // 3) Hash con bcryptjs
     const hash = await bcrypt.hash(String(password), 10);
@@ -101,7 +96,7 @@ export const handler = async (event) => {
           rol_id: 2,
           activo: 1,
           contrasena_hash: hashBytea,
-          // auth_sub: claims.sub // si agregas esta columna
+          // auth_sub: claims.sub // futuro si activas Stack Auth
         },
       ]),
     });
@@ -121,13 +116,13 @@ export const handler = async (event) => {
       body: JSON.stringify({
         ok: true,
         usuario,
-        claims: { sub: claims.sub },
+        claims,
       }),
     };
   } catch (e) {
     return {
-      statusCode: 401,
-      body: JSON.stringify({ error: e.message || "No autorizado" }),
+      statusCode: 500,
+      body: JSON.stringify({ error: e.message || "Error interno" }),
     };
   }
 };
