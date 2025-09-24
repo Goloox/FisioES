@@ -14,15 +14,7 @@ export const handler = async (event) => {
       return { statusCode: 400, body: JSON.stringify({ error: "Faltan datos" }) };
     }
 
-    // 1) Verificar captcha
-    const verify = await fetch(`https://www.google.com/recaptcha/api/siteverify`, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ secret: RECAPTCHA_SECRET, response: captcha }),
-    });
-    const cap = await verify.json();
-    if (!cap.success) return { statusCode: 400, body: JSON.stringify({ error: "Captcha inválido" }) };
-
+   
     // 2) Verificar token
     let payload;
     try {
