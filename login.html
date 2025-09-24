@@ -1,0 +1,39 @@
+<form id="loginForm">
+  <input type="email" name="correo" placeholder="Correo" required />
+  <input type="password" name="password" placeholder="Contraseña" required />
+  <button type="submit">Iniciar sesión</button>
+</form>
+<div id="msg"></div>
+
+<script>
+const form = document.getElementById('loginForm');
+const msg = document.getElementById('msg');
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const data = Object.fromEntries(new FormData(form).entries());
+
+  try {
+    const res = await fetch('/.netlify/functions/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+
+    const out = await res.json();
+    if (!res.ok) throw new Error(out.error);
+
+    // Guardar token en localStorage
+    localStorage.setItem('token', out.token);
+    localStorage.setItem('usuario', JSON.stringify(out.usuario));
+
+    msg.innerHTML = `<div style="color:green">Bienvenido ${out.usuario.nombre_completo}</div>`;
+
+    // Redirigir al home
+    setTimeout(() => location.href = 'Default.html', 1000);
+
+  } catch (err) {
+    msg.innerHTML = `<div style="color:red">${err.message}</div>`;
+  }
+});
+</script>
