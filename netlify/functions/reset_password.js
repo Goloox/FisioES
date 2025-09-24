@@ -1,100 +1,48 @@
-// netlify/functions/reset_password.js
 import bcrypt from "bcryptjs";
-import crypto from "crypto";
-import pkg from "pg";
-const { Client } = pkg;
+import jwt from "jsonwebtoken";
+import { Client } from "pg";
 
-const {
-  DATABASE_URL,
-  RECAPTCHA_SECRET
-} = process.env;
-
-async function verifyCaptcha(responseToken) {
-  if (!RECAPTCHA_SECRET) throw new Error("Falta RECAPTCHA_SECRET");
-  const res = await fetch("https://www.google.com/recaptcha/api/siteverify", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      secret: RECAPTCHA_SECRET,
-      response: responseToken
-    })
-  });
-  const data = await res.json();
-  if (!data.success) throw new Error("Captcha inválido");
-}
+const { DATABASE_URL, RECAPTCHA_SECRET, JWT_SECRET } = process.env;
 
 export const handler = async (event) => {
   try {
-    if (event.httpMethod !== "POST") {
-      return { statusCode: 405, body: JSON.stringify({ error: "Method Not Allowed" }) };
-    }
-    if (!DATABASE_URL) {
-      return { statusCode: 500, body: JSON.stringify({ error: "Falta DATABASE_URL" }) };
-    }
+    if (event.httpMethod !== "POST")
+      return { statusCode: 405, body: JSON.stringify({ error: "Método no permitido" }) };
 
-    let body;
-    try { body = JSON.parse(event.body || "{}"); }
-    catch { return { statusCode: 400, body: JSON.stringify({ error: "JSON inválido" }) }; }
-
-    const { token, password, captcha } = body;
+    const { token, password, captcha } = JSON.parse(event.body || "{}");
     if (!token || !password || !captcha) {
-      return { statusCode: 400, body: JSON.stringify({ error: "Token, contraseña y captcha requeridos" }) };
-    }
-    if (String(password).length < 8) {
-      return { statusCode: 400, body: JSON.stringify({ error: "La contraseña debe tener al menos 8 caracteres" }) };
+      return { statusCode: 400, body: JSON.stringify({ error: "Faltan datos" }) };
     }
 
-    await verifyCaptcha(captcha);
+    // 1) Verificar captcha
+    const verify = await fetch(`https://www.google.com/recaptcha/api/siteverify`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ secret: RECAPTCHA_SECRET, response: captcha }),
+    });
+    const cap = await verify.json();
+    if (!cap.success) return { statusCode: 400, body: JSON.stringify({ error: "Captcha inválido" }) };
 
-    const token_hash = crypto.createHash("sha256").update(token).digest(); // Buffer
+    // 2) Verificar token
+    let payload;
+    try {
+      payload = jwt.verify(token, JWT_SECRET);
+    } catch {
+      return { statusCode: 400, body: JSON.stringify({ error: "Token inválido o caducado" }) };
+    }
+
+    const correo = payload.correo;
+
+    // 3) Actualizar password en BD
+    const hash = await bcrypt.hash(password, 10);
 
     const client = new Client({ connectionString: DATABASE_URL, ssl: { rejectUnauthorized: false } });
     await client.connect();
-
-    // Obtener solicitud válida
-    const q = await client.query(
-      `SELECT pr.id, pr.user_id, pr.expires_at, pr.used_at
-       FROM fisio.password_reset pr
-       WHERE pr.token_hash = $1
-       ORDER BY pr.created_at DESC
-       LIMIT 1`,
-      [token_hash]
-    );
-
-    if (q.rows.length === 0) {
-      await client.end();
-      return { statusCode: 400, body: JSON.stringify({ error: "Token inválido" }) };
-    }
-
-    const req = q.rows[0];
-    if (req.used_at) {
-      await client.end();
-      return { statusCode: 400, body: JSON.stringify({ error: "Token ya usado" }) };
-    }
-    if (new Date(req.expires_at).getTime() < Date.now()) {
-      await client.end();
-      return { statusCode: 400, body: JSON.stringify({ error: "Token expirado" }) };
-    }
-
-    // Hash de la nueva contraseña (BYTEA)
-    const hash = await bcrypt.hash(String(password), 10);
-    const hashBytea = Buffer.from(hash, "utf8");
-
-    // Actualizar usuario y marcar token usado (transacción simple)
-    await client.query("BEGIN");
-    await client.query(
-      `UPDATE fisio.usuario SET contrasena_hash = $1 WHERE id = $2`,
-      [hashBytea, req.user_id]
-    );
-    await client.query(
-      `UPDATE fisio.password_reset SET used_at = now() WHERE id = $1`,
-      [req.id]
-    );
-    await client.query("COMMIT");
+    await client.query("UPDATE fisio.usuario SET contrasena_hash = $1 WHERE correo = $2", [hash, correo]);
     await client.end();
 
     return { statusCode: 200, body: JSON.stringify({ ok: true }) };
   } catch (e) {
-    return { statusCode: 500, body: JSON.stringify({ error: e.message || "Error" }) };
+    return { statusCode: 500, body: JSON.stringify({ error: e.message }) };
   }
 };
