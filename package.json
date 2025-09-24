@@ -1,0 +1,14 @@
+{
+  "name": "fisioes-web",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "echo Static",
+    "dev": "netlify dev"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "jose": "^5.9.3"
+  }
+}
