@@ -30,7 +30,7 @@ form.addEventListener('submit', async (e) => {
     msg.innerHTML = `<div style="color:green">Bienvenido ${out.usuario.nombre_completo}</div>`;
 
     // Redirigir al home
-    setTimeout(() => location.href = 'Default.html', 1000);
+    setTimeout(() => location.href = 'homecliente.html', 1000);
 
   } catch (err) {
     msg.innerHTML = `<div style="color:red">${err.message}</div>`;
