@@ -60,15 +60,15 @@
             <form id="loginForm" novalidate>
               <div class="mb-3">
                 <label class="form-label" for="correo">Correo</label>
-                <input type="email" class="form-control" id="correo" name="correo" required>
+                <input type="email" class="form-control" id="correo" name="correo" required autocomplete="email">
                 <div class="invalid-feedback">Ingresa un correo válido.</div>
               </div>
 
               <div class="mb-3">
                 <label class="form-label" for="password">Contraseña</label>
                 <div class="input-group">
-                  <input type="password" class="form-control" id="password" name="password" required>
-                  <button class="btn btn-outline-secondary" type="button" id="togglePwd">
+                  <input type="password" class="form-control" id="password" name="password" minlength="8" required autocomplete="current-password">
+                  <button class="btn btn-outline-secondary" type="button" id="togglePwd" aria-label="Mostrar/Ocultar contraseña">
                     <i class="fa-regular fa-eye"></i>
                   </button>
                   <div class="invalid-feedback">Ingresa tu contraseña.</div>
@@ -86,8 +86,8 @@
 
             <hr class="my-4">
             <p class="mb-0 small text-muted">
-              ¿No tienes cuenta? <a href="signin.html">Regístrate aquí</a>.
-              ¿olvidaste tu contraseña? <a href="forgot.html">recuperala aquí</a>.
+              ¿No tienes cuenta? <a href="signin.html">Regístrate aquí</a>.<br>
+              ¿Olvidaste tu contraseña? <a href="forgot.html">Recupérala aquí</a>.
             </p>
           </div>
         </div>
@@ -107,6 +107,22 @@
 <script>
   // Año dinámico
   document.getElementById('year').textContent = new Date().getFullYear();
+
+  // Si ya hay sesión, redirigir al home correspondiente
+  (function autoRedirectIfLogged() {
+    const token = localStorage.getItem('token');
+    const userStr = localStorage.getItem('user');
+    if (!token || !userStr) return;
+
+    try {
+      const user = JSON.parse(userStr);
+      if (user?.rol_id === 1) {
+        location.href = 'homeadmin.html';
+      } else {
+        location.href = 'homecliente.html';
+      }
+    } catch (_) {}
+  })();
 
   // Toggle contraseña
   const togglePwd = document.getElementById('togglePwd');
@@ -145,18 +161,19 @@
         body: JSON.stringify(data)
       });
 
-      const out = await res.json();
+      const out = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(out.error || 'Error al iniciar sesión');
 
-      // Guardar token y usuario
+      // Guardar token y usuario con claves consistentes
       localStorage.setItem('token', out.token);
-      localStorage.setItem('usuario', JSON.stringify(out.usuario));
+      localStorage.setItem('user', JSON.stringify(out.usuario));
 
-      msg.innerHTML = `<div class="alert alert-success">
-        Bienvenido <b>${out.usuario.nombre_completo}</b>.
-      </div>`;
-
-      setTimeout(() => location.href = 'homecliente.html', 1200);
+      // Redirigir según rol
+      if (out.usuario?.rol_id === 1) {
+        location.href = 'homeadmin.html';
+      } else {
+        location.href = 'homecliente.html';
+      }
     } catch (err) {
       msg.innerHTML = `<div class="alert alert-danger">${err.message}</div>`;
     } finally {
