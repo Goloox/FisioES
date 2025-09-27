@@ -13,6 +13,30 @@
   <link rel="stylesheet" href="CSS/style.css">
   <link rel="stylesheet" href="CSS/navbar.css">
   <link rel="icon" href="Img/logo.jpg" type="image/jpg">
+  <script>
+  (function checkAuth() {
+    const token = localStorage.getItem('token');
+    const userStr = localStorage.getItem('user');
+
+    if (!token || !userStr) {
+      // No hay sesión → al login
+      location.href = 'login.html';
+      return;
+    }
+
+    try {
+      const user = JSON.parse(userStr);
+      if (user?.rol_id !== 1) {
+        // Usuario sin permisos de admin → fuera
+        location.href = 'homecliente.html';
+      }
+    } catch (e) {
+      // Error al parsear datos → limpiar y redirigir
+      localStorage.clear();
+      location.href = 'login.html';
+    }
+  })();
+</script>
 </head>
 <body class="bg-light">
 
