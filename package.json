@@ -11,6 +11,7 @@
     "bcryptjs": "^2.4.3",
     "pg": "^8.11.5",
     "jsonwebtoken": "^9.0.2",
-    "nodemailer": "^6.9.15"
+    "nodemailer": "^6.9.15",
+    "busboy": "^1.6.0"
   }
 }
