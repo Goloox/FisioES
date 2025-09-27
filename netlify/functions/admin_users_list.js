@@ -1,16 +1,16 @@
-// netlify/functions/admin_users_list.js  (ESM)
+// netlify/functions/admin_users_list.js  (ESM + handler nombrado)
 import { Client } from "pg";
 import jwt from "jsonwebtoken";
 
-function getPayload(authHeader) {
+function getPayloadFromAuth(authHeader) {
   if (!authHeader) return null;
   const [, token] = authHeader.split(" ");
   if (!token) return null;
   try { return jwt.verify(token, process.env.JWT_SECRET); } catch { return null; }
 }
 
-export default async function handler(event) {
-  const p = getPayload(event.headers.authorization);
+export const handler = async (event) => {
+  const p = getPayloadFromAuth(event.headers.authorization);
   if (!p) return { statusCode: 401, body: "Token inválido" };
   const rolId = p.rol_id ?? p.role_id ?? p.role ?? p.rol ?? null;
   if (rolId !== 1) return { statusCode: 403, body: "Solo ADMIN" };
@@ -22,15 +22,11 @@ export default async function handler(event) {
   const rol_id = qs.rol_id ? Number(qs.rol_id) : null;
   const activo = qs.activo ? Number(qs.activo) : null;
 
-  const client = new Client({
-    connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false },
-  });
+  const client = new Client({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
   await client.connect();
 
   const where = [];
   const args = [];
-
   if (q) {
     args.push("%" + q.toLowerCase() + "%");
     where.push(`(LOWER(nombre_completo) LIKE $${args.length}
@@ -66,4 +62,4 @@ export default async function handler(event) {
   } finally {
     try { await client.end(); } catch {}
   }
-}
+};
