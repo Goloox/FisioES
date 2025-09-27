@@ -143,7 +143,7 @@
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td>${(data.page-1)*data.pageSize + idx + 1}</td>
-        <td><img class="avatar" src="/.netlify/functions/avatar?usuario_id=${u.id}" onerror="this.src='${FALLBACK}'"></td>
+        <td><img class="avatar" src="/.netlify/functions/avatar?usuario_id=${u.id}&jwt=${encodeURIComponent(localStorage.getItem('token'))}" onerror="this.src='${FALLBACK}'"></td>
         <td>${u.nombre_completo}</td>
         <td><code>${u.correo}</code></td>
         <td>${u.cedula}</td>
