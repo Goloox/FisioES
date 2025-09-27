@@ -13,13 +13,19 @@
   <link rel="stylesheet" href="CSS/style.css">
   <link rel="stylesheet" href="CSS/navbar.css">
   <link rel="icon" href="Img/logo.jpg" type="image/jpg">
+
+  <style>
+    /* mini estilo por si no lo tienes aún */
+    .avatar{width:36px;height:36px;border-radius:50%;object-fit:cover;border:2px solid rgba(255,255,255,.6);background:#222}
+    .avatar:hover{opacity:.9;cursor:pointer}
+  </style>
+
   <script>
   (function checkAuth() {
     const token = localStorage.getItem('token');
     const userStr = localStorage.getItem('user');
 
     if (!token || !userStr) {
-      // No hay sesión → al login
       location.href = 'login.html';
       return;
     }
@@ -27,16 +33,14 @@
     try {
       const user = JSON.parse(userStr);
       if (user?.rol_id !== 1) {
-        // Usuario sin permisos de admin → fuera
         location.href = 'homecliente.html';
       }
     } catch (e) {
-      // Error al parsear datos → limpiar y redirigir
       localStorage.clear();
       location.href = 'login.html';
     }
   })();
-</script>
+  </script>
 </head>
 <body class="bg-light">
 
@@ -47,7 +51,10 @@
       <span class="fw-semibold">FISIOES</span>
     </a>
     <div class="ms-auto d-flex align-items-center gap-3">
+      <img id="avatarImg" class="avatar" alt="Avatar">
       <span id="adminName" class="text-white-50 small"></span>
+      <a href="admin-usuarios.html" class="btn btn-outline-primary btn-sm"><i class="fa-solid fa-user-gear me-1"></i> Usuarios</a>
+      <a href="profile.html" class="btn btn-outline-secondary btn-sm"><i class="fa-solid fa-id-badge me-1"></i> Perfil</a>
       <button id="btnLogout" class="btn btn-outline-light btn-sm"><i class="fa-solid fa-right-from-bracket me-1"></i> Salir</button>
     </div>
   </div>
@@ -182,6 +189,8 @@
 
   const adminNameEl = document.getElementById('adminName');
   const estadoList = document.getElementById('estadoList');
+  const avatarEl = document.getElementById('avatarImg');
+  const FALLBACK = 'Img/default-avatar.png';
 
   function decodeJwt(token){
     try{
@@ -209,19 +218,16 @@
     return;
   }
 
-  // si el JWT trae rol_id en el payload úsalo; si no, intenta desde localStorage.user
   const user = (() => {
     try { return JSON.parse(userStr || '{}'); } catch { return {}; }
   })();
 
   const rolId = payload.rol_id ?? user.rol_id;
   if(rolId !== 1){
-    // no es admin
     location.href = 'homecliente.html';
     return;
   }
 
-  // Pinta nombre y estado
   const nombre = user?.nombre_completo || payload?.correo || 'Admin';
   adminNameEl.textContent = nombre;
 
@@ -232,7 +238,22 @@
     <li>Expira: ${new Date(payload.exp*1000).toLocaleString()}</li>
   `;
 
-  // Stats (placeholder; puedes reemplazar por fetch a Functions)
+  // Avatar desde Function (BINARIO → ideal para <img src>)
+  function setAvatar(url){
+    avatarEl.src = url || FALLBACK;
+    avatarEl.onerror = ()=> avatarEl.src = FALLBACK;
+  }
+  try{
+    const u = JSON.parse(localStorage.getItem('user') || '{}');
+    // Si ya guardaste la URL después de subir foto:
+    if (u.avatar_url) setAvatar(u.avatar_url);
+    else setAvatar('/.netlify/functions/avatar?me=1');
+  }catch{
+    setAvatar('/.netlify/functions/avatar?me=1');
+  }
+  avatarEl.addEventListener('click', ()=> location.href = 'profile.html');
+
+  // Stats placeholder
   document.getElementById('statUsuarios').textContent = '—';
   document.getElementById('statCitasHoy').textContent = '—';
   document.getElementById('statVideos').textContent = '—';
