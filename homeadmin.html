@@ -39,6 +39,19 @@
       localStorage.clear();
       location.href = 'login.html';
     }
+    // después de validar sesión:
+const token = localStorage.getItem('token');
+const avatarEl = document.getElementById('avatarImg');
+const FALLBACK = 'Img/default-avatar.png';
+
+function setAvatar(url){
+  avatarEl.src = url || FALLBACK;
+  avatarEl.onerror = () => avatarEl.src = FALLBACK;
+}
+
+// para el propio admin:
+setAvatar('/.netlify/functions/avatar?me=1&jwt='+encodeURIComponent(token));
+
   })();
   </script>
 </head>
