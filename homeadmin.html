@@ -15,11 +15,11 @@
   <link rel="icon" href="Img/logo.jpg" type="image/jpg">
 
   <style>
-    /* mini estilo por si no lo tienes aún */
     .avatar{width:36px;height:36px;border-radius:50%;object-fit:cover;border:2px solid rgba(255,255,255,.6);background:#222}
     .avatar:hover{opacity:.9;cursor:pointer}
   </style>
 
+  <!-- Guard de sesión (sin tocar el DOM aún) -->
   <script>
   (function checkAuth() {
     const token = localStorage.getItem('token');
@@ -29,7 +29,6 @@
       location.href = 'login.html';
       return;
     }
-
     try {
       const user = JSON.parse(userStr);
       if (user?.rol_id !== 1) {
@@ -39,19 +38,6 @@
       localStorage.clear();
       location.href = 'login.html';
     }
-    // después de validar sesión:
-const token = localStorage.getItem('token');
-const avatarEl = document.getElementById('avatarImg');
-const FALLBACK = 'Img/default-avatar.png';
-
-function setAvatar(url){
-  avatarEl.src = url || FALLBACK;
-  avatarEl.onerror = () => avatarEl.src = FALLBACK;
-}
-
-// para el propio admin:
-setAvatar('/.netlify/functions/avatar?me=1&jwt='+encodeURIComponent(token));
-
   })();
   </script>
 </head>
@@ -195,7 +181,7 @@ setAvatar('/.netlify/functions/avatar?me=1&jwt='+encodeURIComponent(token));
   </div>
 </footer>
 
-<!-- Script de guardia y UI -->
+<!-- Script de guardia y UI (se ejecuta cuando el DOM ya existe) -->
 <script>
 (function(){
   document.getElementById('year').textContent = new Date().getFullYear();
@@ -251,19 +237,22 @@ setAvatar('/.netlify/functions/avatar?me=1&jwt='+encodeURIComponent(token));
     <li>Expira: ${new Date(payload.exp*1000).toLocaleString()}</li>
   `;
 
-  // Avatar desde Function (BINARIO → ideal para <img src>)
-  function setAvatar(url){
-    avatarEl.src = url || FALLBACK;
+  // Cargar avatar con Authorization (sin exponer el JWT en la URL)
+  async function loadMyAvatar(){
+    try{
+      const r = await fetch('/.netlify/functions/avatar?me=1', {
+        headers: { 'Authorization': 'Bearer ' + token }
+      });
+      if(!r.ok) throw new Error('no avatar');
+      const blob = await r.blob();
+      avatarEl.src = URL.createObjectURL(blob);
+    }catch{
+      avatarEl.src = FALLBACK;
+    }
     avatarEl.onerror = ()=> avatarEl.src = FALLBACK;
   }
-  try{
-    const u = JSON.parse(localStorage.getItem('user') || '{}');
-    // Si ya guardaste la URL después de subir foto:
-    if (u.avatar_url) setAvatar(u.avatar_url);
-    else setAvatar('/.netlify/functions/avatar?me=1');
-  }catch{
-    setAvatar('/.netlify/functions/avatar?me=1');
-  }
+  loadMyAvatar();
+
   avatarEl.addEventListener('click', ()=> location.href = 'profile.html');
 
   // Stats placeholder
