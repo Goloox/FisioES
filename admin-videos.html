@@ -96,14 +96,14 @@
 <script>
 (function(){
   const token = localStorage.getItem('token');
+  document.getElementById('btnLogout').addEventListener('click', ()=>{ localStorage.clear(); location.href='login.html'; });
+
   const msg = document.getElementById('msg');
   function say(text, ok=true){ msg.textContent = text; msg.className = 'small mt-2 ' + (ok?'text-success':'text-danger'); }
 
-  // Helper: lee una sola vez el body
   async function readJsonOrText(res){
     const text = await res.text();
-    let data = null;
-    try { data = JSON.parse(text); } catch {}
+    let data = null; try { data = JSON.parse(text); } catch {}
     return { ok: res.ok, status: res.status, data, text };
   }
 
@@ -135,7 +135,6 @@
     const res = await fetch('/.netlify/functions/video_list?'+params.toString(), { headers:{ 'Authorization':'Bearer '+token } });
     const {ok, data, text} = await readJsonOrText(res);
     if(!ok){ tbody.innerHTML=''; totalLbl.textContent = text || 'Error'; return; }
-
     tbody.innerHTML = '';
     data.rows.forEach((v,idx)=>{
       const stream = `/.netlify/functions/video_stream?id=${v.id_video}&jwt=${encodeURIComponent(token)}`;
@@ -144,10 +143,7 @@
         <td>${(data.page-1)*data.pageSize + idx + 1}</td>
         <td>${v.titulo}</td>
         <td>${v.objetivo}</td>
-        <td>${Number(v.has_file)
-              ? `<a class="btn btn-sm btn-outline-primary" href="${stream}" target="_blank"><i class="fa-solid fa-play me-1"></i> Ver</a>`
-              : '<span class="badge text-bg-secondary">Sin archivo</span>'}
-        </td>
+        <td>${Number(v.has_file) ? `<a class="btn btn-sm btn-outline-primary" href="${stream}" target="_blank"><i class="fa-solid fa-play me-1"></i> Ver</a>` : '<span class="badge text-bg-secondary">Sin archivo</span>'}</td>
         <td>${new Date(v.created_at).toLocaleString()}</td>
       `;
       tbody.appendChild(tr);
@@ -161,8 +157,6 @@
   document.getElementById('btnBuscar').addEventListener('click', ()=>{ page=1; load(); });
   prev.addEventListener('click', ()=>{ if(page>1){ page--; load(); }});
   next.addEventListener('click', ()=>{ page++; load(); });
-
-  document.getElementById('btnLogout').addEventListener('click', ()=>{ localStorage.clear(); location.href='login.html'; });
 
   load();
 })();
