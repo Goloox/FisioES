@@ -1,143 +1,327 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Panel Admin • FISIOES</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Panel Admin • FISIOES</title>
 
-  <!-- Bootstrap / FA -->
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" rel="stylesheet">
+<link rel="stylesheet" href="CSS/style.css">
+<link rel="stylesheet" href="CSS/navbar.css">
+<link rel="icon" href="Img/logo.jpg" type="image/jpg">
 
-  <!-- Estilos existentes -->
-  <link rel="stylesheet" href="CSS/style.css">
-  <link rel="stylesheet" href="CSS/navbar.css">
-  <link rel="icon" href="Img/logo.jpg" type="image/jpg">
+<style>
+  .avatar{width:36px;height:36px;border-radius:50%;object-fit:cover;border:2px solid rgba(255,255,255,.6);background:#222}
+  .avatar-sm{width:28px;height:28px;border-radius:50%;object-fit:cover;background:#eee;border:1px solid rgba(0,0,0,.06)}
+  .row-selectable tr{cursor:pointer}
+  .row-selectable tr.table-active td{background:#e8f4ff!important}
+  .thumb{width:90px;height:70px;object-fit:cover;border-radius:6px;border:1px solid rgba(0,0,0,.08);background:#f2f2f2}
+</style>
 
-  <style>
-    .avatar{width:36px;height:36px;border-radius:50%;object-fit:cover;border:2px solid rgba(255,255,255,.6);background:#222}
-    .avatar:hover{opacity:.9;cursor:pointer}
-  </style>
-
-  <!-- Guard de sesión (sin tocar el DOM aún) -->
-  <script>
-  (function checkAuth() {
-    const token = localStorage.getItem('token');
-    const userStr = localStorage.getItem('user');
-
-    if (!token || !userStr) {
-      location.href = 'login.html';
-      return;
-    }
-    try {
-      const user = JSON.parse(userStr);
-      if (user?.rol_id !== 1) {
-        location.href = 'homecliente.html';
-      }
-    } catch (e) {
-      localStorage.clear();
-      location.href = 'login.html';
-    }
-  })();
-  </script>
+<script>
+(function(){
+  const t=localStorage.getItem('token'), u=localStorage.getItem('user');
+  if(!t||!u){ location.href='login.html'; return; }
+  try{ if(JSON.parse(u).rol_id!==1) location.href='homecliente.html'; }catch{ localStorage.clear(); location.href='login.html';}
+})();
+</script>
 </head>
 <body class="bg-light">
 
-
-
-<footer class="footer py-3 border-top">
-  <div class="container text-center">
-    <small>© <span id="year"></span> FISIOES — Todos los derechos reservados</small>
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark sticky-top">
+  <div class="container">
+    <a class="navbar-brand d-flex align-items-center gap-2" href="Default.html">
+      <img src="Img/logo.jpg" alt="FISIOES" style="height:40px;width:40px;border-radius:6px;object-fit:cover;">
+      <span class="fw-semibold">FISIOES</span>
+    </a>
+    <div class="ms-auto d-flex align-items-center gap-3">
+      <img id="avatarImg" class="avatar" alt="Avatar">
+      <span id="adminName" class="text-white-50 small"></span>
+      <a href="admin-usuarios.html" class="btn btn-outline-primary btn-sm"><i class="fa-solid fa-user-gear me-1"></i> Usuarios</a>
+      <a href="admin-videos.html" class="btn btn-outline-warning btn-sm"><i class="fa-solid fa-circle-plus me-1"></i> Añadir video</a>
+      <a href="admin-videos-asignar.html" class="btn btn-outline-info btn-sm"><i class="fa-solid fa-list-check me-1"></i> Asignar videos</a>
+      <a href="profile.html" class="btn btn-outline-secondary btn-sm"><i class="fa-solid fa-id-badge me-1"></i> Perfil</a>
+      <button id="btnLogout" class="btn btn-outline-light btn-sm"><i class="fa-solid fa-right-from-bracket me-1"></i> Salir</button>
+    </div>
   </div>
-</footer>
+</nav>
 
-<!-- Script de guardia y UI (DOM ya cargado) -->
+<header class="py-5 text-white" style="background-image:url('Img/fisioes.jpg'); background-size:cover; background-position:center;">
+  <div class="container">
+    <h1 class="display-6 fw-bold text-shadow-sm mb-0">Panel de administración</h1>
+    <p class="lead mt-2 mb-0">Consulta usuarios, videos y citas</p>
+  </div>
+</header>
+
+<main class="container py-4">
+  <div class="row g-4">
+    <!-- Lista de usuarios -->
+    <div class="col-12 col-lg-4">
+      <div class="card border-0 shadow-sm rounded-4 h-100">
+        <div class="card-body">
+          <div class="d-flex align-items-end gap-2">
+            <div class="flex-fill">
+              <label class="form-label small">Buscar usuario</label>
+              <input id="uq" class="form-control" placeholder="Nombre, correo o cédula">
+            </div>
+            <div>
+              <label class="form-label small">Pág.</label>
+              <select id="upageSize" class="form-select"><option>10</option><option>20</option><option>50</option></select>
+            </div>
+            <button id="ubtn" class="btn btn-primary"><i class="fa-solid fa-magnifying-glass"></i></button>
+          </div>
+
+          <div class="table-responsive mt-3">
+            <table class="table table-sm align-middle row-selectable">
+              <thead><tr><th>#</th><th>Avatar</th><th>Nombre</th><th>Correo</th></tr></thead>
+              <tbody id="utbody"><tr><td colspan="4" class="text-muted">Cargando…</td></tr></tbody>
+            </table>
+          </div>
+          <div class="d-flex justify-content-between align-items-center">
+            <div class="small text-muted" id="utotalLbl">0 usuario(s)</div>
+            <div class="btn-group">
+              <button id="uprev" class="btn btn-outline-secondary btn-sm">&laquo;</button>
+              <span id="upageLbl" class="btn btn-outline-secondary btn-sm disabled">1</span>
+              <button id="unext" class="btn btn-outline-secondary btn-sm">&raquo;</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Detalle del usuario -->
+    <div class="col-12 col-lg-8">
+      <!-- Ficha usuario -->
+      <div class="card border-0 shadow-sm rounded-4 mb-4">
+        <div class="card-body">
+          <div class="d-flex align-items-center gap-3">
+            <img id="uAvatar" class="avatar" src="Img/default-avatar.png" alt="">
+            <div class="flex-fill">
+              <h2 id="uNombre" class="h5 mb-1">Selecciona un usuario</h2>
+              <div id="uLinea" class="text-muted small">—</div>
+            </div>
+            <span id="uEstado" class="badge text-bg-secondary">—</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Videos asignados -->
+      <div class="card border-0 shadow-sm rounded-4 mb-4">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <h3 class="h6 mb-0">Videos asignados</h3>
+            <a id="btnIrAsignar" href="admin-videos-asignar.html" class="btn btn-sm btn-outline-info disabled">
+              <i class="fa-solid fa-list-check me-1"></i> Asignar
+            </a>
+          </div>
+          <div class="table-responsive">
+            <table class="table table-sm align-middle">
+              <thead><tr><th>#</th><th>Título</th><th>Objetivo</th><th>Video</th><th>Observación</th><th>Actualizado</th></tr></thead>
+              <tbody id="vtbody"><tr><td colspan="6" class="text-muted">Selecciona un usuario…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Citas -->
+      <div class="card border-0 shadow-sm rounded-4">
+        <div class="card-body">
+          <h3 class="h6 mb-2">Citas</h3>
+          <div id="citasWrap"><div class="text-muted">Selecciona un usuario…</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- Modal imagen grande -->
+<div class="modal fade" id="imgModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content">
+      <img id="imgModalPic" alt="" style="width:100%;height:auto;border-radius:0.5rem">
+    </div>
+  </div>
+</div>
+
 <script>
 (function(){
-  document.getElementById('year').textContent = new Date().getFullYear();
-
-  const adminNameEl = document.getElementById('adminName');
-  const estadoList = document.getElementById('estadoList');
-  const avatarEl = document.getElementById('avatarImg');
+  const token = localStorage.getItem('token');
   const FALLBACK = 'Img/default-avatar.png';
 
-  function decodeJwt(token){
-    try{
-      const payload = token.split('.')[1];
-      const json = atob(payload.replace(/-/g,'+').replace(/_/g,'/'));
-      return JSON.parse(decodeURIComponent(escape(json)));
-    }catch(e){ return null; }
-  }
-
-  const token = localStorage.getItem('token');
-  const userStr = localStorage.getItem('user');
-
-  if(!token){
-    location.href = 'login.html';
-    return;
-  }
-
-  const payload = decodeJwt(token);
-  const now = Math.floor(Date.now()/1000);
-
-  if(!payload || !payload.exp || payload.exp <= now){
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    location.href = 'login.html';
-    return;
-  }
-
-  const user = (() => {
-    try { return JSON.parse(userStr || '{}'); } catch { return {}; }
+  // Top-right avatar + nombre
+  (async function loadMyAvatar(){
+    const nameEl = document.getElementById('adminName');
+    const u = JSON.parse(localStorage.getItem('user')||'{}');
+    nameEl.textContent = u?.nombre_completo || 'Admin';
+    const img = document.getElementById('avatarImg');
+    img.src = '/.netlify/functions/avatar?me=1&jwt='+encodeURIComponent(token);
+    img.onerror = ()=> img.src = FALLBACK;
   })();
 
-  const rolId = payload.rol_id ?? user.rol_id;
-  if(rolId !== 1){
-    location.href = 'homecliente.html';
-    return;
-  }
-
-  const nombre = user?.nombre_completo || payload?.correo || 'Admin';
-  adminNameEl.textContent = nombre;
-
-  estadoList.innerHTML = `
-    <li>Autenticado como <strong>${nombre}</strong></li>
-    <li>Correo: <code>${payload.correo || user?.correo || ''}</code></li>
-    <li>Rol: <span class="badge text-bg-primary">ADMIN</span></li>
-    <li>Expira: ${new Date(payload.exp*1000).toLocaleString()}</li>
-  `;
-
-  // Cargar avatar con Authorization
-  async function loadMyAvatar(){
-    try{
-      const r = await fetch('/.netlify/functions/avatar?me=1', {
-        headers: { 'Authorization': 'Bearer ' + token }
-      });
-      if(!r.ok) throw new Error('no avatar');
-      const blob = await r.blob();
-      avatarEl.src = URL.createObjectURL(blob);
-    }catch{
-      avatarEl.src = FALLBACK;
-    }
-    avatarEl.onerror = ()=> avatarEl.src = FALLBACK;
-  }
-  loadMyAvatar();
-
-  avatarEl.addEventListener('click', ()=> location.href = 'profile.html');
-
-  // Stats placeholder
-  document.getElementById('statUsuarios').textContent = '—';
-  document.getElementById('statCitasHoy').textContent = '—';
-  document.getElementById('statVideos').textContent = '—';
-  document.getElementById('statSesion').textContent = 'Activa';
-
-  // Logout
-  document.getElementById('btnLogout').addEventListener('click', () => {
-    localStorage.removeItem('token'); localStorage.removeItem('user'); location.href = 'login.html';
+  document.getElementById('btnLogout').addEventListener('click', ()=>{
+    localStorage.removeItem('token'); localStorage.removeItem('user'); location.href='login.html';
   });
+
+  async function readJsonOrText(res){
+    const t = await res.text(); let d=null; try{ d=JSON.parse(t); }catch{}
+    return { ok:res.ok, status:res.status, data:d, text:t };
+  }
+
+  // ---------- LISTA USUARIOS ----------
+  const utbody   = document.getElementById('utbody');
+  const uq       = document.getElementById('uq');
+  const upageSz  = document.getElementById('upageSize');
+  const uprev    = document.getElementById('uprev');
+  const unext    = document.getElementById('unext');
+  const upageLbl = document.getElementById('upageLbl');
+  const utotalLbl= document.getElementById('utotalLbl');
+  let upage = 1, selectedUser = null;
+
+  async function loadUsers(){
+    utbody.innerHTML = '<tr><td colspan="4" class="text-muted">Cargando…</td></tr>';
+    const qs = new URLSearchParams({ page:upage, pageSize:upageSz.value, q:uq.value.trim() });
+    try{
+      const r = await fetch('/.netlify/functions/admin_users_list?'+qs, { headers:{ Authorization:'Bearer '+token }});
+      const {ok, data, text} = await readJsonOrText(r);
+      if(!ok){ utbody.innerHTML = `<tr><td colspan="4">${data?.error||text||'Error'}</td></tr>`; return; }
+      utbody.innerHTML = '';
+      if(!data.rows.length){
+        utbody.innerHTML = '<tr><td colspan="4" class="text-muted">Sin resultados</td></tr>';
+      }
+      data.rows.forEach((u,idx)=>{
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${(data.page-1)*data.pageSize + idx + 1}</td>
+          <td><img class="avatar-sm" src="/.netlify/functions/avatar?usuario_id=${u.id}&jwt=${encodeURIComponent(token)}" onerror="this.src='${FALLBACK}'"></td>
+          <td>${u.nombre_completo}</td>
+          <td><code>${u.correo}</code></td>`;
+        tr.addEventListener('click', ()=>{ selectUser(u); utbody.querySelectorAll('tr').forEach(r=>r.classList.remove('table-active')); tr.classList.add('table-active'); });
+        utbody.appendChild(tr);
+      });
+      utotalLbl.textContent = `${data.total} usuario(s)`;
+      upageLbl.textContent  = data.page;
+      uprev.disabled = data.page<=1;
+      unext.disabled = data.page*data.pageSize >= data.total;
+    }catch(e){
+      utbody.innerHTML = '<tr><td colspan="4">Error de red</td></tr>';
+    }
+  }
+  document.getElementById('ubtn').addEventListener('click', ()=>{ upage=1; loadUsers(); });
+  uprev.addEventListener('click', ()=>{ if(upage>1){ upage--; loadUsers(); }});
+  unext.addEventListener('click', ()=>{ upage++; loadUsers(); });
+
+  // ---------- PANE DERECHO ----------
+  const uAvatar = document.getElementById('uAvatar');
+  const uNombre = document.getElementById('uNombre');
+  const uLinea  = document.getElementById('uLinea');
+  const uEstado = document.getElementById('uEstado');
+  const btnIrAsignar = document.getElementById('btnIrAsignar');
+
+  function selectUser(u){
+    selectedUser = u;
+    // ficha
+    uAvatar.src = '/.netlify/functions/avatar?usuario_id='+u.id+'&jwt='+encodeURIComponent(token);
+    uAvatar.onerror = ()=> uAvatar.src = FALLBACK;
+    uNombre.textContent = u.nombre_completo;
+    uLinea.innerHTML = `
+      <span class="me-3"><i class="fa-solid fa-envelope me-1"></i>${u.correo}</span>
+      <span class="me-3"><i class="fa-solid fa-id-card me-1"></i>${u.cedula}</span>
+      <span class="me-3"><i class="fa-solid fa-user-shield me-1"></i>${u.rol_id===1?'ADMIN':'CLIENTE'}</span>
+      <span><i class="fa-regular fa-clock me-1"></i>Creado: ${new Date(u.created_at).toLocaleString()}</span>
+    `;
+    uEstado.className = 'badge '+(u.activo===1?'text-bg-success':'text-bg-secondary');
+    uEstado.textContent = u.activo===1?'Activo':'Inactivo';
+    btnIrAsignar.classList.remove('disabled');
+
+    loadAssignedVideos(u.id);
+    loadCitas(u.id);
+  }
+
+  // Videos asignados
+  async function loadAssignedVideos(idUsuario){
+    const tbody = document.getElementById('vtbody');
+    tbody.innerHTML = '<tr><td colspan="6" class="text-muted">Cargando…</td></tr>';
+    try{
+      const r = await fetch('/.netlify/functions/video_assign_list?id_usuario='+idUsuario, { headers:{ Authorization:'Bearer '+token }});
+      const {ok, data, text} = await readJsonOrText(r);
+      if(!ok){ tbody.innerHTML = `<tr><td colspan="6">${data?.error||text||'Error'}</td></tr>`; return; }
+      if(!data.rows.length){ tbody.innerHTML = '<tr><td colspan="6" class="text-muted">Sin videos</td></tr>'; return; }
+      tbody.innerHTML = '';
+      data.rows.forEach((a,idx)=>{
+        const url = '/.netlify/functions/video_stream?id='+a.id_video+'&jwt='+encodeURIComponent(token);
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${idx+1}</td>
+          <td>${a.titulo}</td>
+          <td>${a.objetivo}</td>
+          <td><a class="btn btn-sm btn-outline-primary" target="_blank" href="${url}"><i class="fa-solid fa-play me-1"></i> Ver</a></td>
+          <td>${a.observacion||''}</td>
+          <td>${new Date(a.updated_at).toLocaleString()}</td>`;
+        tbody.appendChild(tr);
+      });
+    }catch(e){
+      tbody.innerHTML = '<tr><td colspan="6">Error de red</td></tr>';
+    }
+  }
+
+  // Citas + imágenes
+  async function loadCitas(idUsuario){
+    const wrap = document.getElementById('citasWrap');
+    wrap.innerHTML = '<div class="text-muted">Cargando…</div>';
+    try{
+      const r = await fetch('/.netlify/functions/citas_list?id_usuario='+idUsuario, { headers:{ Authorization:'Bearer '+token }});
+      const {ok, data, text} = await readJsonOrText(r);
+      if(!ok){ wrap.innerHTML = `<div>${data?.error||text||'Error'}</div>`; return; }
+      if(!data.rows.length){ wrap.innerHTML = '<div class="text-muted">Sin citas</div>'; return; }
+
+      const acc = document.createElement('div');
+      acc.className = 'accordion';
+      data.rows.forEach((c,i)=>{
+        const item = document.createElement('div');
+        item.className = 'accordion-item';
+        const hId = 'h'+c.id_cita, bId = 'b'+c.id_cita;
+        item.innerHTML = `
+          <h2 class="accordion-header" id="${hId}">
+            <button class="accordion-button ${i? 'collapsed':''}" type="button" data-bs-toggle="collapse" data-bs-target="#${bId}">
+              <div class="me-2 badge text-bg-secondary">${new Date(c.fecha).toLocaleString()}</div>
+              <strong>${c.titulo}</strong>
+            </button>
+          </h2>
+          <div id="${bId}" class="accordion-collapse collapse ${i? '':'show'}" data-bs-parent="#accordionCitas">
+            <div class="accordion-body">
+              <p class="mb-2">${c.descripcion || '<span class="text-muted">Sin descripción</span>'}</p>
+              ${c.images && c.images.length ? '<div class="d-flex flex-wrap gap-2" id="gal_'+c.id_cita+'"></div>' : '<div class="text-muted">Sin imágenes</div>'}
+            </div>
+          </div>`;
+        acc.appendChild(item);
+
+        // Galería
+        if(c.images && c.images.length){
+          const gal = item.querySelector('#gal_'+c.id_cita);
+          c.images.forEach(imgId=>{
+            const a = document.createElement('a');
+            const src = '/.netlify/functions/cita_image?id='+imgId+'&jwt='+encodeURIComponent(token);
+            a.innerHTML = `<img class="thumb" src="${src}" alt="">`;
+            a.href = src;
+            a.target = '_blank';
+            a.addEventListener('click', (ev)=>{ ev.preventDefault(); document.getElementById('imgModalPic').src = src; new bootstrap.Modal('#imgModal').show(); });
+            gal.appendChild(a);
+          });
+        }
+      });
+      acc.id = 'accordionCitas';
+      wrap.innerHTML = '';
+      wrap.appendChild(acc);
+    }catch(e){
+      wrap.innerHTML = '<div>Error de red</div>';
+    }
+  }
+
+  // init
+  loadUsers();
 })();
 </script>
-
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
