@@ -36,18 +36,18 @@
 
   <div class="card border-0 shadow-sm rounded-4 mb-4">
     <div class="card-body">
-      <form id="formVid" class="row g-3">
+      <form id="formVid" class="row g-3" enctype="multipart/form-data">
         <div class="col-12 col-md-4">
           <label class="form-label">Objetivo</label>
-          <input required id="objetivo" class="form-control" placeholder="Fortalecer hombro, movilidad lumbar...">
+          <input required name="objetivo" id="objetivo" class="form-control" placeholder="Fortalecer hombro…">
         </div>
         <div class="col-12 col-md-4">
           <label class="form-label">Título</label>
-          <input required id="titulo" class="form-control" placeholder="Rotación externa con banda">
+          <input required name="titulo" id="titulo" class="form-control" placeholder="Rotación externa…">
         </div>
         <div class="col-12 col-md-4">
-          <label class="form-label">URL del video</label>
-          <input required id="video_url" class="form-control" placeholder="https://…">
+          <label class="form-label">Archivo de video</label>
+          <input required name="file" id="file" type="file" accept="video/*" class="form-control">
         </div>
         <div class="col-12 d-grid d-md-flex gap-2">
           <button class="btn btn-warning"><i class="fa-solid fa-circle-plus me-1"></i> Guardar</button>
@@ -63,7 +63,7 @@
       <div class="row g-2 align-items-end">
         <div class="col-12 col-md-6">
           <label class="form-label small">Buscar</label>
-          <input id="q" class="form-control" placeholder="Título, objetivo o URL">
+          <input id="q" class="form-control" placeholder="Título u objetivo">
         </div>
         <div class="col-6 col-md-2">
           <label class="form-label small">Por página</label>
@@ -76,7 +76,7 @@
 
       <div class="table-responsive mt-3">
         <table class="table table-sm align-middle">
-          <thead><tr><th>#</th><th>Título</th><th>Objetivo</th><th>URL</th><th>Creado</th></tr></thead>
+          <thead><tr><th>#</th><th>Título</th><th>Objetivo</th><th>Archivo</th><th>Creado</th></tr></thead>
           <tbody id="tbody"></tbody>
         </table>
       </div>
@@ -99,21 +99,19 @@
   const msg = document.getElementById('msg');
   function say(text, ok=true){ msg.textContent = text; msg.className = 'small mt-2 ' + (ok?'text-success':'text-danger'); }
 
-  // crear
+  // crear (multipart)
   document.getElementById('formVid').addEventListener('submit', async (e)=>{
     e.preventDefault();
-    const objetivo = document.getElementById('objetivo').value.trim();
-    const titulo = document.getElementById('titulo').value.trim();
-    const video_url = document.getElementById('video_url').value.trim();
+    const fd = new FormData(e.target);
     try{
-      const r = await fetch('/.netlify/functions/video_create', {
+      const r = await fetch('/.netlify/functions/video_upload', {
         method:'POST',
-        headers:{ 'Authorization':'Bearer '+token, 'Content-Type':'application/json' },
-        body: JSON.stringify({ objetivo, titulo, video_url })
+        headers:{ 'Authorization':'Bearer '+token },
+        body: fd
       });
       const data = await r.json().catch(()=>null);
       if(!r.ok) throw new Error(data?.error || (await r.text()));
-      say('Video creado (#'+data.id_video+')');
+      say('Video subido (#'+data.id_video+')');
       e.target.reset();
       load();
     }catch(err){
@@ -130,19 +128,18 @@
 
   async function load(){
     const params = new URLSearchParams({ page, pageSize: pageSizeEl.value, q: q.value.trim() });
-    const r = await fetch('/.netlify/functions/video_list?'+params.toString(), {
-      headers:{ 'Authorization':'Bearer '+token }
-    });
+    const r = await fetch('/.netlify/functions/video_list?'+params.toString(), { headers:{ 'Authorization':'Bearer '+token } });
     if(!r.ok){ tbody.innerHTML=''; totalLbl.textContent='Error'; return; }
     const data = await r.json();
     tbody.innerHTML = '';
     data.rows.forEach((v,idx)=>{
+      const stream = `/.netlify/functions/video_stream?id=${v.id_video}&jwt=${encodeURIComponent(token)}`;
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td>${(data.page-1)*data.pageSize + idx + 1}</td>
         <td>${v.titulo}</td>
         <td>${v.objetivo}</td>
-        <td><a href="${v.video_url}" target="_blank">${v.video_url}</a></td>
+        <td>${v.has_file ? `<a class="btn btn-sm btn-outline-primary" href="${stream}" target="_blank"><i class="fa-solid fa-play me-1"></i> Ver</a>` : '<span class="badge text-bg-secondary">Sin archivo</span>'}</td>
         <td>${new Date(v.created_at).toLocaleString()}</td>
       `;
       tbody.appendChild(tr);
