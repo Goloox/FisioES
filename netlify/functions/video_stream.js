@@ -29,6 +29,7 @@ export const handler = async (event) => {
   await client.connect();
   try {
     if (role !== 1) {
+      // Solo clientes asignados pueden ver
       const chk = await client.query(
         `SELECT 1 FROM fisio.video_asignacion WHERE id_video=$1 AND id_usuario=$2 LIMIT 1`,
         [id, claimUserId]
@@ -46,8 +47,8 @@ export const handler = async (event) => {
     if (!r.rowCount) return { statusCode: 404, body: "No existe" };
 
     const { filename, mime_type, archivo } = r.rows[0];
-    const disp = qs.download ? `attachment; filename="${filename}"` : `inline; filename="${filename}"`;
 
+    // Normaliza a Buffer (PG puede devolver Buffer o hex)
     const buf = Buffer.isBuffer(archivo)
       ? archivo
       : (archivo?.type === "Buffer" && Array.isArray(archivo?.data))
@@ -55,6 +56,8 @@ export const handler = async (event) => {
         : typeof archivo === "string" && archivo.startsWith("\\x")
           ? Buffer.from(archivo.slice(2), "hex")
           : Buffer.from(archivo);
+
+    const disp = qs.download ? `attachment; filename="${filename}"` : `inline; filename="${filename}"`;
 
     return {
       statusCode: 200,
