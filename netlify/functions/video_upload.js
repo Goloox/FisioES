@@ -3,7 +3,7 @@ import { Client } from "pg";
 import jwt from "jsonwebtoken";
 import Busboy from "busboy";
 
-const MAX_MB = Number(process.env.MAX_VIDEO_MB || 10); // ajusta si tu hosting lo permite
+const MAX_MB = Number(process.env.MAX_VIDEO_MB || 10); // ajusta según hosting
 
 function getAuthClaims(event) {
   const h = event.headers || {};
@@ -56,21 +56,27 @@ function parseMultipart(event) {
 }
 
 export const handler = async (event) => {
-  if (event.httpMethod !== "POST") return { statusCode: 405, body: "Method not allowed" };
+  if (event.httpMethod !== "POST") {
+    return { statusCode: 405, headers:{'Content-Type':'application/json'}, body: JSON.stringify({ error: "Method not allowed" }) };
+  }
 
   const claims = getAuthClaims(event);
-  if (!claims) return { statusCode: 401, body: "Unauthorized" };
+  if (!claims) return { statusCode: 401, headers:{'Content-Type':'application/json'}, body: JSON.stringify({ error: "Unauthorized" }) };
   const role = Number(claims.rol_id ?? claims.role_id ?? claims.role ?? claims.rol);
-  if (role !== 1) return { statusCode: 403, body: "Solo ADMIN" };
+  if (role !== 1) return { statusCode: 403, headers:{'Content-Type':'application/json'}, body: JSON.stringify({ error: "Solo ADMIN" }) };
 
   let parsed;
   try { parsed = await parseMultipart(event); }
-  catch (e) { return { statusCode: 400, body: "Upload error: " + e.message }; }
+  catch (e) {
+    return { statusCode: 400, headers:{'Content-Type':'application/json'}, body: JSON.stringify({ error: "Upload error: " + e.message }) };
+  }
 
   const { fields, fileBuf, fileInfo } = parsed;
   const objetivo = (fields.objetivo || "").trim();
   const titulo   = (fields.titulo || "").trim();
-  if (!objetivo || !titulo || !fileBuf) return { statusCode: 400, body: "Faltan campos (objetivo, titulo, file)" };
+  if (!objetivo || !titulo || !fileBuf) {
+    return { statusCode: 400, headers:{'Content-Type':'application/json'}, body: JSON.stringify({ error: "Faltan campos (objetivo, titulo, file)" }) };
+  }
 
   const client = new Client({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
   await client.connect();
@@ -114,7 +120,7 @@ export const handler = async (event) => {
       })
     };
   } catch (e) {
-    return { statusCode: 500, body: "Error: " + e.message };
+    return { statusCode: 500, headers:{'Content-Type':'application/json'}, body: JSON.stringify({ error: "Error: " + e.message }) };
   } finally {
     try { await client.end(); } catch {}
   }
