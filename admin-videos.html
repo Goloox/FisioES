@@ -76,7 +76,7 @@
 
       <div class="table-responsive mt-3">
         <table class="table table-sm align-middle">
-          <thead><tr><th>#</th><th>Título</th><th>Objetivo</th><th>Archivo</th><th>Creado</th></tr></thead>
+          <thead><tr><th>#</th><th>Título</th><th>Objetivo</th><th>Archivo</th><th>Creado</th><th class="text-end">Acciones</th></tr></thead>
           <tbody id="tbody"></tbody>
         </table>
       </div>
@@ -123,6 +123,19 @@
     load();
   });
 
+  // eliminar video
+  async function deleteVideo(id){
+    if(!confirm('¿Eliminar este video? Esto quitará también asignaciones.')) return;
+    const res = await fetch('/.netlify/functions/video_delete', {
+      method:'POST',
+      headers:{ 'Authorization':'Bearer '+token, 'Content-Type':'application/json' },
+      body: JSON.stringify({ id_video: id })
+    });
+    const {ok, data, text} = await readJsonOrText(res);
+    if(!ok){ alert(data?.error || text || 'No se pudo eliminar'); return; }
+    load();
+  }
+
   // listar
   const tbody = document.getElementById('tbody');
   const q = document.getElementById('q'), pageSizeEl = document.getElementById('pageSize');
@@ -145,8 +158,14 @@
         <td>${v.objetivo}</td>
         <td>${Number(v.has_file) ? `<a class="btn btn-sm btn-outline-primary" href="${stream}" target="_blank"><i class="fa-solid fa-play me-1"></i> Ver</a>` : '<span class="badge text-bg-secondary">Sin archivo</span>'}</td>
         <td>${new Date(v.created_at).toLocaleString()}</td>
+        <td class="text-end">
+          <button class="btn btn-sm btn-outline-danger" data-id="${v.id_video}"><i class="fa-solid fa-trash me-1"></i> Eliminar</button>
+        </td>
       `;
       tbody.appendChild(tr);
+    });
+    tbody.querySelectorAll('button.btn-outline-danger').forEach(b=>{
+      b.addEventListener('click', ()=>deleteVideo(Number(b.dataset.id)));
     });
     totalLbl.textContent = `${data.total} resultado(s)`;
     pageLbl.textContent = data.page;
