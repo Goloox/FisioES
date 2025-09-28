@@ -3,7 +3,6 @@ import { Client } from "pg";
 import jwt from "jsonwebtoken";
 
 export const handler = async (event) => {
-  // solo admin
   const hdr = event.headers || {};
   const auth = hdr.authorization || hdr.Authorization || "";
   if (!auth.startsWith("Bearer ")) return { statusCode: 401, body: "Unauthorized" };
@@ -22,7 +21,7 @@ export const handler = async (event) => {
   const where = [];
   if (q) {
     args.push("%" + q + "%");
-    where.push(`(LOWER(titulo) LIKE $${args.length} OR LOWER(objetivo) LIKE $${args.length} OR LOWER(video_url) LIKE $${args.length})`);
+    where.push(`(LOWER(titulo) LIKE $${args.length} OR LOWER(objetivo) LIKE $${args.length})`);
   }
   const whereSql = where.length ? "WHERE " + where.join(" AND ") : "";
 
@@ -32,11 +31,13 @@ export const handler = async (event) => {
     const tot = await client.query(`SELECT COUNT(*)::int AS c FROM fisio.video ${whereSql}`, args);
     args.push(pageSize, (page - 1) * pageSize);
     const { rows } = await client.query(
-      `SELECT id_video, objetivo, titulo, video_url, created_at, updated_at
-         FROM fisio.video
-         ${whereSql}
-         ORDER BY id_video DESC
-         LIMIT $${args.length - 1} OFFSET $${args.length}`, args);
+      `SELECT v.id_video, v.objetivo, v.titulo, v.created_at,
+              CASE WHEN va.id_video IS NULL THEN 0 ELSE 1 END AS has_file
+         FROM fisio.video v
+         LEFT JOIN fisio.video_archivo va ON va.id_video = v.id_video
+        ${whereSql}
+        ORDER BY v.id_video DESC
+        LIMIT $${args.length - 1} OFFSET $${args.length}`, args);
     return { statusCode: 200, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rows, total: tot.rows[0].c, page, pageSize }) };
   } catch (e) {
     return { statusCode: 500, body: "Error: " + e.message };
