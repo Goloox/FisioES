@@ -102,7 +102,7 @@
           <h2 class="h6">Asignaciones del usuario</h2>
           <div class="table-responsive">
             <table class="table table-sm align-middle">
-              <thead><tr><th>#</th><th>Título</th><th>Objetivo</th><th>URL</th><th>Observación</th><th>Actualizado</th></tr></thead>
+              <thead><tr><th>#</th><th>Título</th><th>Objetivo</th><th>Video</th><th>Observación</th><th>Actualizado</th></tr></thead>
               <tbody id="atbody"></tbody>
             </table>
           </div>
@@ -117,20 +117,24 @@
   const token = localStorage.getItem('token');
   document.getElementById('btnLogout').addEventListener('click', ()=>{ localStorage.clear(); location.href='login.html'; });
 
-  // Carga de videos en el select
+  // Carga de videos en el select (solo con archivo)
   async function loadVideos(){
     const sel = document.getElementById('videoSel');
     sel.innerHTML = '<option value="">Cargando…</option>';
-    const r = await fetch('/.netlify/functions/video_list?page=1&pageSize=100&q=', { headers:{ 'Authorization':'Bearer '+token } });
+    const r = await fetch('/.netlify/functions/video_list?page=1&pageSize=200&q=', {
+      headers:{ 'Authorization':'Bearer '+token }
+    });
     if(!r.ok){ sel.innerHTML = '<option value="">Error</option>'; return; }
     const data = await r.json();
     sel.innerHTML = '<option value="">— Selecciona un video —</option>';
-    data.rows.forEach(v=>{
-      const opt = document.createElement('option');
-      opt.value = v.id_video;
-      opt.textContent = `${v.titulo} — ${v.objetivo}`;
-      sel.appendChild(opt);
-    });
+    data.rows
+      .filter(v => Number(v.has_file) === 1)     // <-- solo videos con archivo
+      .forEach(v=>{
+        const opt = document.createElement('option');
+        opt.value = v.id_video;
+        opt.textContent = `${v.titulo} — ${v.objetivo}`;
+        sel.appendChild(opt);
+      });
   }
 
   // Tabla de usuarios (reusa admin_users_list)
@@ -176,8 +180,13 @@
   // Asignaciones del usuario seleccionado
   const atbody = document.getElementById('atbody');
   async function loadAssignments(){
-    if(!selectedUserId){ atbody.innerHTML = '<tr><td colspan="6" class="text-muted">Selecciona un usuario…</td></tr>'; return; }
-    const r = await fetch('/.netlify/functions/video_assign_list?id_usuario='+selectedUserId, { headers:{ 'Authorization':'Bearer '+token } });
+    if(!selectedUserId){
+      atbody.innerHTML = '<tr><td colspan="6" class="text-muted">Selecciona un usuario…</td></tr>';
+      return;
+    }
+    const r = await fetch('/.netlify/functions/video_assign_list?id_usuario='+selectedUserId, {
+      headers:{ 'Authorization':'Bearer '+token }
+    });
     if(!r.ok){ atbody.innerHTML = '<tr><td colspan="6">Error</td></tr>'; return; }
     const data = await r.json();
     atbody.innerHTML = '';
@@ -186,12 +195,21 @@
       return;
     }
     data.rows.forEach((a,idx)=>{
+      const link = `/.netlify/functions/video_stream?id=${a.id_video}&jwt=${encodeURIComponent(token)}`;
+      // const dl   = link + '&download=1'; // <-- si quieres botón "Descargar"
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td>${idx+1}</td>
         <td>${a.titulo}</td>
         <td>${a.objetivo}</td>
-        <td><a href="${a.video_url}" target="_blank">${a.video_url}</a></td>
+        <td>
+          <a class="btn btn-sm btn-outline-primary" href="${link}" target="_blank">
+            <i class="fa-solid fa-play me-1"></i> Ver
+          </a>
+          <!-- <a class="btn btn-sm btn-outline-secondary ms-1" href="${dl}">
+            <i class="fa-solid fa-download me-1"></i> Descargar
+          </a> -->
+        </td>
         <td>${a.observacion || ''}</td>
         <td>${new Date(a.updated_at).toLocaleString()}</td>`;
       atbody.appendChild(tr);
