@@ -1,0 +1,46 @@
+// netlify/functions/video_list.js
+import { Client } from "pg";
+import jwt from "jsonwebtoken";
+
+export const handler = async (event) => {
+  // solo admin
+  const hdr = event.headers || {};
+  const auth = hdr.authorization || hdr.Authorization || "";
+  if (!auth.startsWith("Bearer ")) return { statusCode: 401, body: "Unauthorized" };
+  let claims;
+  try { claims = jwt.verify(auth.slice(7), process.env.JWT_SECRET); } catch { return { statusCode: 401, body: "Unauthorized" }; }
+  if (Number(claims.rol_id ?? claims.role_id ?? claims.role ?? claims.rol) !== 1) {
+    return { statusCode: 403, body: "Solo ADMIN" };
+  }
+
+  const qs = event.queryStringParameters || {};
+  const page = Math.max(1, parseInt(qs.page || "1", 10));
+  const pageSize = Math.min(100, Math.max(1, parseInt(qs.pageSize || "10", 10)));
+  const q = (qs.q || "").trim().toLowerCase();
+
+  const args = [];
+  const where = [];
+  if (q) {
+    args.push("%" + q + "%");
+    where.push(`(LOWER(titulo) LIKE $${args.length} OR LOWER(objetivo) LIKE $${args.length} OR LOWER(video_url) LIKE $${args.length})`);
+  }
+  const whereSql = where.length ? "WHERE " + where.join(" AND ") : "";
+
+  const client = new Client({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
+  await client.connect();
+  try {
+    const tot = await client.query(`SELECT COUNT(*)::int AS c FROM fisio.video ${whereSql}`, args);
+    args.push(pageSize, (page - 1) * pageSize);
+    const { rows } = await client.query(
+      `SELECT id_video, objetivo, titulo, video_url, created_at, updated_at
+         FROM fisio.video
+         ${whereSql}
+         ORDER BY id_video DESC
+         LIMIT $${args.length - 1} OFFSET $${args.length}`, args);
+    return { statusCode: 200, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rows, total: tot.rows[0].c, page, pageSize }) };
+  } catch (e) {
+    return { statusCode: 500, body: "Error: " + e.message };
+  } finally {
+    try { await client.end(); } catch {}
+  }
+};
