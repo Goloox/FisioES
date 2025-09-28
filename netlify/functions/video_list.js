@@ -6,16 +6,9 @@ export const handler = async (event) => {
   try {
     const hdr = event.headers || {};
     const auth = hdr.authorization || hdr.Authorization || "";
-    if (!auth.startsWith("Bearer ")) {
-      return { statusCode: 401, body: "Unauthorized" };
-    }
+    if (!auth.startsWith("Bearer ")) return { statusCode: 401, body: "Unauthorized" };
     let claims;
-    try {
-      claims = jwt.verify(auth.slice(7), process.env.JWT_SECRET);
-    } catch {
-      return { statusCode: 401, body: "Unauthorized" };
-    }
-    // Solo ADMIN
+    try { claims = jwt.verify(auth.slice(7), process.env.JWT_SECRET); } catch { return { statusCode: 401, body: "Unauthorized" }; }
     if (Number(claims.rol_id ?? claims.role_id ?? claims.role ?? claims.rol) !== 1) {
       return { statusCode: 403, body: "Solo ADMIN" };
     }
@@ -29,18 +22,15 @@ export const handler = async (event) => {
     const where = [];
     if (q) {
       args.push("%" + q + "%");
-      // Reutilizamos el mismo parámetro en ambos LIKE (válido en PG)
+      // mismo parámetro en ambos LIKE está bien en PG
       where.push(`(LOWER(titulo) LIKE $${args.length} OR LOWER(objetivo) LIKE $${args.length})`);
     }
     const whereSql = where.length ? "WHERE " + where.join(" AND ") : "";
 
-    const client = new Client({
-      connectionString: process.env.DATABASE_URL,
-      ssl: { rejectUnauthorized: false }
-    });
+    const client = new Client({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
     await client.connect();
     try {
-      // Garantiza la tabla de archivos (evita 500 antes del primer upload)
+      // Evita 500 si todavía no existe video_archivo
       await client.query(`
         CREATE TABLE IF NOT EXISTS fisio.video_archivo(
           id BIGSERIAL PRIMARY KEY,
@@ -55,10 +45,9 @@ export const handler = async (event) => {
       `);
 
       const tot = await client.query(`SELECT COUNT(*)::int AS c FROM fisio.video ${whereSql}`, args);
-
       args.push(pageSize, (page - 1) * pageSize);
       const { rows } = await client.query(
-        `SELECT v.id_video, v.objetivo, v.titulo, v.created_at,
+        `SELECT v.id_video, v.objetivo, v.titulo, v.video_url, v.created_at,
                 CASE WHEN va.id_video IS NULL THEN 0 ELSE 1 END AS has_file
            FROM fisio.video v
            LEFT JOIN fisio.video_archivo va ON va.id_video = v.id_video
@@ -77,10 +66,6 @@ export const handler = async (event) => {
       try { await client.end(); } catch {}
     }
   } catch (e) {
-    return {
-      statusCode: 500,
-      headers: { "Content-Type": "text/plain" },
-      body: "Error video_list: " + e.message
-    };
+    return { statusCode: 500, headers:{'Content-Type':'text/plain'}, body: 'Error video_list: ' + e.message };
   }
 };
