@@ -117,18 +117,24 @@
   const token = localStorage.getItem('token');
   document.getElementById('btnLogout').addEventListener('click', ()=>{ localStorage.clear(); location.href='login.html'; });
 
-  // Carga de videos en el select (solo con archivo)
+  async function readJsonOrText(res){
+    const text = await res.text();
+    let data = null; try { data = JSON.parse(text); } catch {}
+    return { ok: res.ok, status: res.status, data, text };
+  }
+
+  // Carga de videos (solo con archivo)
   async function loadVideos(){
     const sel = document.getElementById('videoSel');
     sel.innerHTML = '<option value="">Cargando…</option>';
-    const r = await fetch('/.netlify/functions/video_list?page=1&pageSize=200&q=', {
+    const res = await fetch('/.netlify/functions/video_list?page=1&pageSize=200&q=', {
       headers:{ 'Authorization':'Bearer '+token }
     });
-    if(!r.ok){ sel.innerHTML = '<option value="">Error</option>'; return; }
-    const data = await r.json();
+    const {ok, data, text} = await readJsonOrText(res);
+    if(!ok){ sel.innerHTML = `<option value="">${text || 'Error'}</option>`; return; }
     sel.innerHTML = '<option value="">— Selecciona un video —</option>';
     data.rows
-      .filter(v => Number(v.has_file) === 1)     // <-- solo videos con archivo
+      .filter(v => Number(v.has_file) === 1)
       .forEach(v=>{
         const opt = document.createElement('option');
         opt.value = v.id_video;
@@ -137,7 +143,7 @@
       });
   }
 
-  // Tabla de usuarios (reusa admin_users_list)
+  // Tabla de usuarios
   const utbody = document.getElementById('utbody');
   const uq = document.getElementById('uq');
   const upageSizeEl = document.getElementById('upageSize');
@@ -152,11 +158,11 @@
 
   async function loadUsers(){
     const params = new URLSearchParams({
-      page: upage, pageSize: upageSizeEl.value, q: uq.value.trim(), activo: 1 // solo activos
+      page: upage, pageSize: upageSizeEl.value, q: uq.value.trim(), activo: 1
     });
-    const r = await fetch('/.netlify/functions/admin_users_list?'+params.toString(), { headers:{ 'Authorization':'Bearer '+token } });
-    if(!r.ok){ utbody.innerHTML = ''; utotalLbl.textContent='Error'; return; }
-    const data = await r.json();
+    const res = await fetch('/.netlify/functions/admin_users_list?'+params.toString(), { headers:{ 'Authorization':'Bearer '+token } });
+    const {ok, data, text} = await readJsonOrText(res);
+    if(!ok){ utbody.innerHTML = ''; utotalLbl.textContent = text || 'Error'; return; }
     utbody.innerHTML = '';
     data.rows.forEach((u,idx)=>{
       const tr = document.createElement('tr');
@@ -177,18 +183,17 @@
     uprev.disabled = data.page<=1; unext.disabled = data.page*data.pageSize >= data.total;
   }
 
-  // Asignaciones del usuario seleccionado
+  // Asignaciones del usuario
   const atbody = document.getElementById('atbody');
   async function loadAssignments(){
     if(!selectedUserId){
-      atbody.innerHTML = '<tr><td colspan="6" class="text-muted">Selecciona un usuario…</td></tr>';
-      return;
+      atbody.innerHTML = '<tr><td colspan="6" class="text-muted">Selecciona un usuario…</td></tr>'; return;
     }
-    const r = await fetch('/.netlify/functions/video_assign_list?id_usuario='+selectedUserId, {
+    const res = await fetch('/.netlify/functions/video_assign_list?id_usuario='+selectedUserId, {
       headers:{ 'Authorization':'Bearer '+token }
     });
-    if(!r.ok){ atbody.innerHTML = '<tr><td colspan="6">Error</td></tr>'; return; }
-    const data = await r.json();
+    const {ok, data, text} = await readJsonOrText(res);
+    if(!ok){ atbody.innerHTML = `<tr><td colspan="6">${text || 'Error'}</td></tr>`; return; }
     atbody.innerHTML = '';
     if(!data.rows.length){
       atbody.innerHTML = '<tr><td colspan="6" class="text-muted">Sin asignaciones</td></tr>';
@@ -196,7 +201,6 @@
     }
     data.rows.forEach((a,idx)=>{
       const link = `/.netlify/functions/video_stream?id=${a.id_video}&jwt=${encodeURIComponent(token)}`;
-      // const dl   = link + '&download=1'; // <-- si quieres botón "Descargar"
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td>${idx+1}</td>
@@ -206,9 +210,6 @@
           <a class="btn btn-sm btn-outline-primary" href="${link}" target="_blank">
             <i class="fa-solid fa-play me-1"></i> Ver
           </a>
-          <!-- <a class="btn btn-sm btn-outline-secondary ms-1" href="${dl}">
-            <i class="fa-solid fa-download me-1"></i> Descargar
-          </a> -->
         </td>
         <td>${a.observacion || ''}</td>
         <td>${new Date(a.updated_at).toLocaleString()}</td>`;
@@ -222,13 +223,13 @@
     const observacion = document.getElementById('obs').value.trim();
     if(!selectedUserId){ alert('Selecciona un usuario'); return; }
     if(!id_video){ alert('Selecciona un video'); return; }
-    const r = await fetch('/.netlify/functions/video_assign', {
+    const res = await fetch('/.netlify/functions/video_assign', {
       method:'POST',
       headers:{ 'Authorization':'Bearer '+token, 'Content-Type':'application/json' },
       body: JSON.stringify({ id_usuario: selectedUserId, id_video, observacion })
     });
-    const data = await r.json().catch(()=>null);
-    if(!r.ok){ alert(data?.error || 'No se pudo asignar'); return; }
+    const {ok, data, text} = await readJsonOrText(res);
+    if(!ok){ alert(data?.error || text || 'No se pudo asignar'); return; }
     document.getElementById('obs').value = '';
     await loadAssignments();
     alert('Asignado correctamente');
