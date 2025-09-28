@@ -99,24 +99,28 @@
   const msg = document.getElementById('msg');
   function say(text, ok=true){ msg.textContent = text; msg.className = 'small mt-2 ' + (ok?'text-success':'text-danger'); }
 
+  // Helper: lee una sola vez el body
+  async function readJsonOrText(res){
+    const text = await res.text();
+    let data = null;
+    try { data = JSON.parse(text); } catch {}
+    return { ok: res.ok, status: res.status, data, text };
+  }
+
   // crear (multipart)
   document.getElementById('formVid').addEventListener('submit', async (e)=>{
     e.preventDefault();
     const fd = new FormData(e.target);
-    try{
-      const r = await fetch('/.netlify/functions/video_upload', {
-        method:'POST',
-        headers:{ 'Authorization':'Bearer '+token },
-        body: fd
-      });
-      const data = await r.json().catch(()=>null);
-      if(!r.ok) throw new Error(data?.error || (await r.text()));
-      say('Video subido (#'+data.id_video+')');
-      e.target.reset();
-      load();
-    }catch(err){
-      say('Error: '+err.message, false);
-    }
+    const res = await fetch('/.netlify/functions/video_upload', {
+      method:'POST',
+      headers:{ 'Authorization':'Bearer '+token },
+      body: fd
+    });
+    const {ok, data, text} = await readJsonOrText(res);
+    if(!ok){ say(data?.error || text || 'Error subiendo video', false); return; }
+    say('Video subido (#'+data.id_video+')');
+    e.target.reset();
+    load();
   });
 
   // listar
@@ -128,9 +132,10 @@
 
   async function load(){
     const params = new URLSearchParams({ page, pageSize: pageSizeEl.value, q: q.value.trim() });
-    const r = await fetch('/.netlify/functions/video_list?'+params.toString(), { headers:{ 'Authorization':'Bearer '+token } });
-    if(!r.ok){ tbody.innerHTML=''; totalLbl.textContent='Error'; return; }
-    const data = await r.json();
+    const res = await fetch('/.netlify/functions/video_list?'+params.toString(), { headers:{ 'Authorization':'Bearer '+token } });
+    const {ok, data, text} = await readJsonOrText(res);
+    if(!ok){ tbody.innerHTML=''; totalLbl.textContent = text || 'Error'; return; }
+
     tbody.innerHTML = '';
     data.rows.forEach((v,idx)=>{
       const stream = `/.netlify/functions/video_stream?id=${v.id_video}&jwt=${encodeURIComponent(token)}`;
@@ -139,7 +144,10 @@
         <td>${(data.page-1)*data.pageSize + idx + 1}</td>
         <td>${v.titulo}</td>
         <td>${v.objetivo}</td>
-        <td>${v.has_file ? `<a class="btn btn-sm btn-outline-primary" href="${stream}" target="_blank"><i class="fa-solid fa-play me-1"></i> Ver</a>` : '<span class="badge text-bg-secondary">Sin archivo</span>'}</td>
+        <td>${Number(v.has_file)
+              ? `<a class="btn btn-sm btn-outline-primary" href="${stream}" target="_blank"><i class="fa-solid fa-play me-1"></i> Ver</a>`
+              : '<span class="badge text-bg-secondary">Sin archivo</span>'}
+        </td>
         <td>${new Date(v.created_at).toLocaleString()}</td>
       `;
       tbody.appendChild(tr);
