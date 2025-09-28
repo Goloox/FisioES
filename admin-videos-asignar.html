@@ -62,7 +62,9 @@
           <div class="table-responsive mt-3">
             <table class="table table-sm align-middle row-selectable">
               <thead><tr><th>#</th><th>Avatar</th><th>Nombre</th><th>Correo</th></tr></thead>
-              <tbody id="utbody"></tbody>
+              <tbody id="utbody">
+                <tr><td colspan="4" class="text-muted">Cargando…</td></tr>
+              </tbody>
             </table>
           </div>
 
@@ -94,7 +96,9 @@
             </div>
             <div class="col-12 col-md-5">
               <label class="form-label small">Resultados</label>
-              <select id="videoSel" class="form-select"></select>
+              <select id="videoSel" class="form-select">
+                <option value="">— Selecciona un video —</option>
+              </select>
             </div>
 
             <div class="col-12">
@@ -112,7 +116,9 @@
           <div class="table-responsive">
             <table class="table table-sm align-middle">
               <thead><tr><th>#</th><th>Título</th><th>Objetivo</th><th>Video</th><th>Observación</th><th>Actualizado</th><th class="text-end">Acciones</th></tr></thead>
-              <tbody id="atbody"></tbody>
+              <tbody id="atbody">
+                <tr><td colspan="7" class="text-muted">Selecciona un usuario…</td></tr>
+              </tbody>
             </table>
           </div>
         </div>
@@ -126,29 +132,35 @@
   const token = localStorage.getItem('token');
   document.getElementById('btnLogout').addEventListener('click', ()=>{ localStorage.clear(); location.href='login.html'; });
 
+  // ---------- Utilidad: leer body una sola vez ----------
   async function readJsonOrText(res){
     const text = await res.text();
     let data = null; try { data = JSON.parse(text); } catch {}
     return { ok: res.ok, status: res.status, data, text };
   }
 
-  // Carga de videos (con búsqueda) – solo con archivo
+  // ---------- Buscar videos (solo los que tienen archivo) ----------
   async function loadVideos(q=''){
     const sel = document.getElementById('videoSel');
     sel.innerHTML = '<option value="">Cargando…</option>';
-    const url = '/.netlify/functions/video_list?page=1&pageSize=200&q=' + encodeURIComponent(q || '');
-    const res = await fetch(url, { headers:{ 'Authorization':'Bearer '+token } });
-    const {ok, data, text} = await readJsonOrText(res);
-    if(!ok){ sel.innerHTML = `<option value="">${text || 'Error'}</option>`; return; }
-    sel.innerHTML = '<option value="">— Selecciona un video —</option>';
-    data.rows
-      .filter(v => Number(v.has_file) === 1)
-      .forEach(v=>{
-        const opt = document.createElement('option');
-        opt.value = v.id_video;
-        opt.textContent = `${v.titulo} — ${v.objetivo}`;
-        sel.appendChild(opt);
-      });
+    try{
+      const url = '/.netlify/functions/video_list?page=1&pageSize=200&q=' + encodeURIComponent(q || '');
+      const res = await fetch(url, { headers:{ 'Authorization':'Bearer '+token } });
+      const {ok, data, text} = await readJsonOrText(res);
+      if(!ok){ sel.innerHTML = `<option value="">${data?.error || text || 'Error'}</option>`; return; }
+      sel.innerHTML = '<option value="">— Selecciona un video —</option>';
+      data.rows
+        .filter(v => Number(v.has_file) === 1)
+        .forEach(v=>{
+          const opt = document.createElement('option');
+          opt.value = v.id_video;
+          opt.textContent = `${v.titulo} — ${v.objetivo}`;
+          sel.appendChild(opt);
+        });
+    }catch(err){
+      console.error('video_list error', err);
+      sel.innerHTML = '<option value="">Error de red</option>';
+    }
   }
 
   document.getElementById('vbtn').addEventListener('click', (e)=>{
@@ -156,12 +168,15 @@
     loadVideos(document.getElementById('vq').value.trim());
   });
 
-  // Tabla de usuarios
+  // ---------- Tabla de usuarios ----------
   const utbody = document.getElementById('utbody');
   const uq = document.getElementById('uq');
   const upageSizeEl = document.getElementById('upageSize');
-  const uprev = document.getElementById('uprev'), unext = document.getElementById('unext');
-  const upageLbl = document.getElementById('upageLbl'), utotalLbl = document.getElementById('utotalLbl');
+  const uprev = document.getElementById('uprev');
+  const unext = document.getElementById('unext');
+  const upageLbl = document.getElementById('upageLbl');
+  const utotalLbl = document.getElementById('utotalLbl');
+
   let upage = 1, selectedUserId = null;
 
   function rowSelect(tr){
@@ -172,106 +187,139 @@
   }
 
   async function loadUsers(){
-    const params = new URLSearchParams({
-      page: upage, pageSize: upageSizeEl.value, q: uq.value.trim(), activo: 1
-    });
-    const res = await fetch('/.netlify/functions/admin_users_list?'+params.toString(), { headers:{ 'Authorization':'Bearer '+token } });
-    const {ok, data, text} = await readJsonOrText(res);
-    if(!ok){ utbody.innerHTML = ''; utotalLbl.textContent = text || 'Error'; return; }
-    utbody.innerHTML = '';
-    data.rows.forEach((u,idx)=>{
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td>${(data.page-1)*data.pageSize + idx + 1}</td>
-        <td><img class="avatar" src="/.netlify/functions/avatar?usuario_id=${u.id}&jwt=${encodeURIComponent(token)}" onerror="this.src='Img/default-avatar.png'"></td>
-        <td>${u.nombre_completo}</td>
-        <td><code>${u.correo}</code></td>`;
-      tr.addEventListener('click', ()=>{
-        selectedUserId = u.id;
-        rowSelect(tr);
-        loadAssignments();
+    utbody.innerHTML = '<tr><td colspan="4" class="text-muted">Cargando…</td></tr>';
+    try{
+      const params = new URLSearchParams({
+        page: upage,
+        pageSize: upageSizeEl.value,
+        q: uq.value.trim(),
+        activo: 1
       });
-      utbody.appendChild(tr);
-    });
-    utotalLbl.textContent = `${data.total} usuario(s)`;
-    upageLbl.textContent = data.page;
-    uprev.disabled = data.page<=1; unext.disabled = data.page*data.pageSize >= data.total;
+      const res = await fetch('/.netlify/functions/admin_users_list?'+params.toString(), {
+        headers:{ 'Authorization':'Bearer '+token }
+      });
+      const {ok, data, text} = await readJsonOrText(res);
+      if(!ok){ 
+        utbody.innerHTML = `<tr><td colspan="4">${data?.error || text || 'Error'}</td></tr>`;
+        utotalLbl.textContent = 'Error';
+        return;
+      }
+      utbody.innerHTML = '';
+      if(!data.rows.length){
+        utbody.innerHTML = '<tr><td colspan="4" class="text-muted">Sin usuarios</td></tr>';
+      }
+      data.rows.forEach((u,idx)=>{
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${(data.page-1)*data.pageSize + idx + 1}</td>
+          <td><img class="avatar" src="/.netlify/functions/avatar?usuario_id=${u.id}&jwt=${encodeURIComponent(token)}" onerror="this.src='Img/default-avatar.png'"></td>
+          <td>${u.nombre_completo}</td>
+          <td><code>${u.correo}</code></td>`;
+        tr.addEventListener('click', ()=>{
+          selectedUserId = u.id;
+          rowSelect(tr);
+          loadAssignments();
+        });
+        utbody.appendChild(tr);
+      });
+      utotalLbl.textContent = `${data.total} usuario(s)`;
+      upageLbl.textContent = data.page;
+      uprev.disabled = data.page<=1;
+      unext.disabled = data.page*data.pageSize >= data.total;
+    }catch(err){
+      console.error('admin_users_list error', err);
+      utbody.innerHTML = '<tr><td colspan="4">Error de red</td></tr>';
+      utotalLbl.textContent = 'Error';
+    }
   }
 
-  // Asignaciones del usuario
+  // Navegación de usuarios
+  document.getElementById('ubtn').addEventListener('click', ()=>{ upage=1; loadUsers(); });
+  uprev.addEventListener('click', ()=>{ if(upage>1){ upage--; loadUsers(); }});
+  unext.addEventListener('click', ()=>{ upage++; loadUsers(); });
+
+  // ---------- Asignaciones del usuario ----------
   const atbody = document.getElementById('atbody');
+
   async function loadAssignments(){
     if(!selectedUserId){
-      atbody.innerHTML = '<tr><td colspan="7" class="text-muted">Selecciona un usuario…</td></tr>'; return;
-    }
-    const res = await fetch('/.netlify/functions/video_assign_list?id_usuario='+selectedUserId, {
-      headers:{ 'Authorization':'Bearer '+token }
-    });
-    const {ok, data, text} = await readJsonOrText(res);
-    if(!ok){ atbody.innerHTML = `<tr><td colspan="7">${text || 'Error'}</td></tr>`; return; }
-    atbody.innerHTML = '';
-    if(!data.rows.length){
-      atbody.innerHTML = '<tr><td colspan="7" class="text-muted">Sin asignaciones</td></tr>';
+      atbody.innerHTML = '<tr><td colspan="7" class="text-muted">Selecciona un usuario…</td></tr>';
       return;
     }
-    data.rows.forEach((a,idx)=>{
-      const link = `/.netlify/functions/video_stream?id=${a.id_video}&jwt=${encodeURIComponent(token)}`;
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td>${idx+1}</td>
-        <td>${a.titulo}</td>
-        <td>${a.objetivo}</td>
-        <td><a class="btn btn-sm btn-outline-primary" href="${link}" target="_blank"><i class="fa-solid fa-play me-1"></i> Ver</a></td>
-        <td>${a.observacion || ''}</td>
-        <td>${new Date(a.updated_at).toLocaleString()}</td>
-        <td class="text-end">
-          <button class="btn btn-sm btn-outline-danger" data-video="${a.id_video}"><i class="fa-solid fa-xmark me-1"></i> Quitar</button>
-        </td>`;
-      atbody.appendChild(tr);
-    });
-    atbody.querySelectorAll('button.btn-outline-danger').forEach(b=>{
-      b.addEventListener('click', async ()=>{
-        const id_video = Number(b.dataset.video);
-        if(!confirm('¿Eliminar esta asignación?')) return;
-        const res2 = await fetch('/.netlify/functions/video_assign_delete', {
-          method:'POST',
-          headers:{ 'Authorization':'Bearer '+token, 'Content-Type':'application/json' },
-          body: JSON.stringify({ id_usuario: selectedUserId, id_video })
-        });
-        const {ok, data, text} = await readJsonOrText(res2);
-        if(!ok){ alert(data?.error || text || 'No se pudo eliminar'); return; }
-        loadAssignments();
+    atbody.innerHTML = '<tr><td colspan="7" class="text-muted">Cargando…</td></tr>';
+    try{
+      const res = await fetch('/.netlify/functions/video_assign_list?id_usuario='+selectedUserId, {
+        headers:{ 'Authorization':'Bearer '+token }
       });
-    });
+      const {ok, data, text} = await readJsonOrText(res);
+      if(!ok){
+        atbody.innerHTML = `<tr><td colspan="7">${data?.error || text || 'Error'}</td></tr>`;
+        return;
+      }
+      atbody.innerHTML = '';
+      if(!data.rows.length){
+        atbody.innerHTML = '<tr><td colspan="7" class="text-muted">Sin asignaciones</td></tr>';
+        return;
+      }
+      data.rows.forEach((a,idx)=>{
+        const link = `/.netlify/functions/video_stream?id=${a.id_video}&jwt=${encodeURIComponent(token)}`;
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${idx+1}</td>
+          <td>${a.titulo}</td>
+          <td>${a.objetivo}</td>
+          <td><a class="btn btn-sm btn-outline-primary" href="${link}" target="_blank"><i class="fa-solid fa-play me-1"></i> Ver</a></td>
+          <td>${a.observacion || ''}</td>
+          <td>${new Date(a.updated_at).toLocaleString()}</td>
+          <td class="text-end">
+            <button class="btn btn-sm btn-outline-danger" data-video="${a.id_video}"><i class="fa-solid fa-xmark me-1"></i> Quitar</button>
+          </td>`;
+        atbody.appendChild(tr);
+      });
+      atbody.querySelectorAll('button.btn-outline-danger').forEach(b=>{
+        b.addEventListener('click', async ()=>{
+          const id_video = Number(b.dataset.video);
+          if(!confirm('¿Eliminar esta asignación?')) return;
+          const res2 = await fetch('/.netlify/functions/video_assign_delete', {
+            method:'POST',
+            headers:{ 'Authorization':'Bearer '+token, 'Content-Type':'application/json' },
+            body: JSON.stringify({ id_usuario: selectedUserId, id_video })
+          });
+          const r2 = await readJsonOrText(res2);
+          if(!r2.ok){ alert(r2.data?.error || r2.text || 'No se pudo eliminar'); return; }
+          loadAssignments();
+        });
+      });
+    }catch(err){
+      console.error('video_assign_list error', err);
+      atbody.innerHTML = '<tr><td colspan="7">Error de red</td></tr>';
+    }
   }
 
-  // Asignar
+  // ---------- Asignar ----------
   document.getElementById('btnAsignar').addEventListener('click', async ()=>{
     const id_video = Number(document.getElementById('videoSel').value);
     const observacion = document.getElementById('obs').value.trim();
     if(!selectedUserId){ alert('Selecciona un usuario'); return; }
     if(!id_video){ alert('Selecciona un video'); return; }
-    const res = await fetch('/.netlify/functions/video_assign', {
-      method:'POST',
-      headers:{ 'Authorization':'Bearer '+token, 'Content-Type':'application/json' },
-      body: JSON.stringify({ id_usuario: selectedUserId, id_video, observacion })
-    });
-    const {ok, data, text} = await readJsonOrText(res);
-    if(!ok){ alert(data?.error || text || 'No se pudo asignar'); return; }
-    document.getElementById('obs').value = '';
-    await loadAssignments();
-    alert('Asignado correctamente');
+    try{
+      const res = await fetch('/.netlify/functions/video_assign', {
+        method:'POST',
+        headers:{ 'Authorization':'Bearer '+token, 'Content-Type':'application/json' },
+        body: JSON.stringify({ id_usuario: selectedUserId, id_video, observacion })
+      });
+      const {ok, data, text} = await readJsonOrText(res);
+      if(!ok){ alert(data?.error || text || 'No se pudo asignar'); return; }
+      document.getElementById('obs').value = '';
+      await loadAssignments();
+      alert('Asignado correctamente');
+    }catch(err){
+      console.error('video_assign error', err);
+      alert('Error de red');
+    }
   });
 
-  document.getElementById('ubtn').addEventListener('click', ()=>{ upage=1; loadUsers(); });
-  document.getElementById('vbtn').addEventListener('click', (e)=>{ e.preventDefault(); loadVideos(document.getElementById('vq').value.trim()); });
-  document.getElementById('vq').addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); loadVideos(document.getElementById('vq').value.trim()); }});
-
-  const uprev = document.getElementById('uprev'), unext = document.getElementById('unext');
-  uprev.addEventListener('click', ()=>{ if(upage>1){ upage--; loadUsers(); }});
-  unext.addEventListener('click', ()=>{ upage++; loadUsers(); });
-
-  // init
+  // ---------- Init ----------
   loadVideos();
   loadUsers();
 })();
