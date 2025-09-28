@@ -3,7 +3,7 @@ import { Client } from "pg";
 import jwt from "jsonwebtoken";
 import Busboy from "busboy";
 
-const MAX_MB = Number(process.env.MAX_VIDEO_MB || 10); // ajusta según hosting
+const MAX_MB = Number(process.env.MAX_VIDEO_MB || 10); // ajusta si tu hosting lo permite
 
 function getAuthClaims(event) {
   const h = event.headers || {};
@@ -67,9 +67,7 @@ export const handler = async (event) => {
 
   let parsed;
   try { parsed = await parseMultipart(event); }
-  catch (e) {
-    return { statusCode: 400, headers:{'Content-Type':'application/json'}, body: JSON.stringify({ error: "Upload error: " + e.message }) };
-  }
+  catch (e) { return { statusCode: 400, headers:{'Content-Type':'application/json'}, body: JSON.stringify({ error: "Upload error: " + e.message }) }; }
 
   const { fields, fileBuf, fileInfo } = parsed;
   const objetivo = (fields.objetivo || "").trim();
@@ -81,6 +79,7 @@ export const handler = async (event) => {
   const client = new Client({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
   await client.connect();
   try {
+    // Garantiza tabla binaria
     await client.query(`
       CREATE TABLE IF NOT EXISTS fisio.video_archivo(
         id BIGSERIAL PRIMARY KEY,
@@ -94,29 +93,42 @@ export const handler = async (event) => {
       );
     `);
 
+    // Por el NOT NULL de video_url: inserto con string no-nulo (vacío)
     const v = await client.query(
       `INSERT INTO fisio.video (objetivo, titulo, video_url, created_at, updated_at)
-       VALUES ($1,$2,NULL, now(), now())
-       RETURNING id_video, objetivo, titulo, created_at, updated_at`,
+       VALUES ($1,$2,'', now(), now())
+       RETURNING id_video, objetivo, titulo, video_url, created_at, updated_at`,
       [objetivo, titulo]
     );
     const video = v.rows[0];
 
+    // Guarda el archivo
     await client.query(
       `INSERT INTO fisio.video_archivo (id_video, filename, mime_type, size_bytes, archivo)
        VALUES ($1,$2,$3,$4,$5)`,
       [video.id_video, fileInfo.filename, fileInfo.mime, fileInfo.size, fileBuf]
     );
 
+    // (Opcional) Actualiza video_url con el stream (sin JWT)
+    const streamUrl = `/.netlify/functions/video_stream?id=${video.id_video}`;
+    await client.query(
+      `UPDATE fisio.video SET video_url = $1, updated_at = now() WHERE id_video = $2`,
+      [streamUrl, video.id_video]
+    );
+
     return {
       statusCode: 200,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        ...video,
+        id_video: video.id_video,
+        objetivo: video.objetivo,
+        titulo: video.titulo,
+        created_at: video.created_at,
+        updated_at: video.updated_at,
         filename: fileInfo.filename,
         mime_type: fileInfo.mime,
         size_bytes: fileInfo.size,
-        stream_url: `/.netlify/functions/video_stream?id=${video.id_video}`
+        stream_url: streamUrl
       })
     };
   } catch (e) {
