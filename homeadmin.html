@@ -49,12 +49,53 @@
       <img src="Img/logo.jpg" alt="FISIOES" style="height:40px;width:40px;border-radius:6px;object-fit:cover;">
       <span class="fw-semibold">FISIOES</span>
     </a>
-    <div class="ms-auto d-flex align-items-center gap-3">
-      <img id="avatarImg" class="avatar" alt="Avatar">
-      <span id="adminName" class="text-white-50 small"></span>
-      <a href="admin-usuarios.html" class="btn btn-outline-primary btn-sm"><i class="fa-solid fa-user-gear me-1"></i> Usuarios</a>
-      <a href="profile.html" class="btn btn-outline-secondary btn-sm"><i class="fa-solid fa-id-badge me-1"></i> Perfil</a>
-      <button id="btnLogout" class="btn btn-outline-light btn-sm"><i class="fa-solid fa-right-from-bracket me-1"></i> Salir</button>
+
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#topNav" aria-controls="topNav" aria-expanded="false" aria-label="Toggle navigation">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+
+    <div id="topNav" class="collapse navbar-collapse">
+      <ul class="navbar-nav ms-auto align-items-center gap-2">
+        <li class="nav-item d-flex align-items-center">
+          <img id="avatarImg" class="avatar me-2" alt="Avatar">
+          <span id="adminName" class="text-white-50 small me-2"></span>
+        </li>
+
+        <!-- Botón: Gestionar usuarios -->
+        <li class="nav-item">
+          <a href="admin-usuarios.html" class="btn btn-outline-primary btn-sm">
+            <i class="fa-solid fa-user-gear me-1"></i> Usuarios
+          </a>
+        </li>
+
+        <!-- Botón: Perfil -->
+        <li class="nav-item">
+          <a href="profile.html" class="btn btn-outline-secondary btn-sm">
+            <i class="fa-solid fa-id-badge me-1"></i> Perfil
+          </a>
+        </li>
+
+        <!-- Botón: Añadir video -->
+        <li class="nav-item">
+          <a href="admin-videos.html" class="btn btn-outline-warning btn-sm">
+            <i class="fa-solid fa-circle-plus me-1"></i> Añadir video
+          </a>
+        </li>
+
+        <!-- Botón: Asignar videos -->
+        <li class="nav-item">
+          <a href="admin-videos-asignar.html" class="btn btn-outline-info btn-sm">
+            <i class="fa-solid fa-list-check me-1"></i> Asignar videos
+          </a>
+        </li>
+
+        <!-- Botón: Salir -->
+        <li class="nav-item">
+          <button id="btnLogout" class="btn btn-outline-light btn-sm">
+            <i class="fa-solid fa-right-from-bracket me-1"></i> Salir
+          </button>
+        </li>
+      </ul>
     </div>
   </div>
 </nav>
@@ -146,12 +187,12 @@
               </div>
               <div class="col-12 col-md-6">
                 <a href="admin-videos.html" class="btn btn-outline-warning w-100">
-                  <i class="fa-solid fa-video me-2"></i> Gestionar videos
+                  <i class="fa-solid fa-circle-plus me-2"></i> Añadir video
                 </a>
               </div>
               <div class="col-12 col-md-6">
-                <a href="profile.html" class="btn btn-outline-secondary w-100">
-                  <i class="fa-solid fa-sliders me-2"></i> Perfil
+                <a href="admin-videos-asignar.html" class="btn btn-outline-info w-100">
+                  <i class="fa-solid fa-list-check me-2"></i> Asignar videos
                 </a>
               </div>
             </div>
@@ -181,7 +222,7 @@
   </div>
 </footer>
 
-<!-- Script de guardia y UI (se ejecuta cuando el DOM ya existe) -->
+<!-- Script de guardia y UI (DOM ya cargado) -->
 <script>
 (function(){
   document.getElementById('year').textContent = new Date().getFullYear();
@@ -237,7 +278,7 @@
     <li>Expira: ${new Date(payload.exp*1000).toLocaleString()}</li>
   `;
 
-  // Cargar avatar con Authorization (sin exponer el JWT en la URL)
+  // Cargar avatar con Authorization
   async function loadMyAvatar(){
     try{
       const r = await fetch('/.netlify/functions/avatar?me=1', {
@@ -263,9 +304,7 @@
 
   // Logout
   document.getElementById('btnLogout').addEventListener('click', () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    location.href = 'login.html';
+    localStorage.removeItem('token'); localStorage.removeItem('user'); location.href = 'login.html';
   });
 })();
 </script>
