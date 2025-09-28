@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Asignar videos • FISIOES</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" rel="stylesheet">
+<link rel="stylesheet" href="CSS/style.css"><link rel="stylesheet" href="CSS/navbar.css">
+<link rel="icon" href="Img/logo.jpg" type="image/jpg">
+<script>
+(function(){
+  const t=localStorage.getItem('token'), u=localStorage.getItem('user');
+  if(!t||!u) return location.href='login.html';
+  try{ if(JSON.parse(u).rol_id!==1) location.href='homecliente.html'; }catch{ localStorage.clear(); location.href='login.html';}
+})();
+</script>
+<style>
+  .row-selectable tr { cursor:pointer; }
+  .row-selectable tr.table-active td { background:#e8f4ff!important; }
+  .avatar{width:28px;height:28px;border-radius:50%;object-fit:cover;background:#eee;border:1px solid rgba(0,0,0,.06)}
+</style>
+</head>
+<body class="bg-light">
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark sticky-top">
+  <div class="container">
+    <a class="navbar-brand d-flex align-items-center gap-2" href="homeadmin.html">
+      <img src="Img/logo.jpg" style="height:40px;width:40px;border-radius:6px;object-fit:cover;">
+      <span class="fw-semibold">FISIOES • Admin</span>
+    </a>
+    <div class="ms-auto d-flex gap-2">
+      <a href="admin-videos.html" class="btn btn-outline-warning btn-sm"><i class="fa-solid fa-circle-plus me-1"></i> Añadir video</a>
+      <a href="admin-usuarios.html" class="btn btn-outline-primary btn-sm"><i class="fa-solid fa-user-gear me-1"></i> Usuarios</a>
+      <button id="btnLogout" class="btn btn-outline-light btn-sm"><i class="fa-solid fa-right-from-bracket me-1"></i> Salir</button>
+    </div>
+  </div>
+</nav>
+
+<main class="container py-4">
+  <h1 class="h4 mb-3">Asignar videos</h1>
+
+  <div class="row g-4">
+    <!-- Columna izquierda: usuarios -->
+    <div class="col-12 col-lg-6">
+      <div class="card border-0 shadow-sm rounded-4 h-100">
+        <div class="card-body">
+          <h2 class="h6">1) Selecciona un usuario</h2>
+          <div class="row g-2 align-items-end">
+            <div class="col-12 col-md-8">
+              <label class="form-label small">Buscar</label>
+              <input id="uq" class="form-control" placeholder="Nombre, correo o cédula">
+            </div>
+            <div class="col-6 col-md-2">
+              <label class="form-label small">Por pág.</label>
+              <select id="upageSize" class="form-select"><option>10</option><option>20</option><option>50</option></select>
+            </div>
+            <div class="col-6 col-md-2 d-grid">
+              <button id="ubtn" class="btn btn-primary"><i class="fa-solid fa-magnifying-glass me-1"></i> Buscar</button>
+            </div>
+          </div>
+
+          <div class="table-responsive mt-3">
+            <table class="table table-sm align-middle row-selectable">
+              <thead><tr><th>#</th><th>Avatar</th><th>Nombre</th><th>Correo</th></tr></thead>
+              <tbody id="utbody"></tbody>
+            </table>
+          </div>
+
+          <div class="d-flex justify-content-between align-items-center">
+            <div class="small text-muted" id="utotalLbl">0</div>
+            <div class="btn-group">
+              <button id="uprev" class="btn btn-outline-secondary btn-sm">&laquo;</button>
+              <span id="upageLbl" class="btn btn-outline-secondary btn-sm disabled">1</span>
+              <button id="unext" class="btn btn-outline-secondary btn-sm">&raquo;</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Columna derecha: asignación -->
+    <div class="col-12 col-lg-6">
+      <div class="card border-0 shadow-sm rounded-4 h-100">
+        <div class="card-body">
+          <h2 class="h6">2) Selecciona video y asigna</h2>
+          <div class="row g-3">
+            <div class="col-12">
+              <label class="form-label">Video</label>
+              <select id="videoSel" class="form-select"></select>
+            </div>
+            <div class="col-12">
+              <label class="form-label">Observación (opcional)</label>
+              <input id="obs" class="form-control" placeholder="Frecuencia, repeticiones, etc.">
+            </div>
+            <div class="col-12 d-grid">
+              <button id="btnAsignar" class="btn btn-success"><i class="fa-solid fa-check me-1"></i> Asignar a usuario seleccionado</button>
+            </div>
+          </div>
+
+          <hr class="my-4">
+
+          <h2 class="h6">Asignaciones del usuario</h2>
+          <div class="table-responsive">
+            <table class="table table-sm align-middle">
+              <thead><tr><th>#</th><th>Título</th><th>Objetivo</th><th>URL</th><th>Observación</th><th>Actualizado</th></tr></thead>
+              <tbody id="atbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+(function(){
+  const token = localStorage.getItem('token');
+  document.getElementById('btnLogout').addEventListener('click', ()=>{ localStorage.clear(); location.href='login.html'; });
+
+  // Carga de videos en el select
+  async function loadVideos(){
+    const sel = document.getElementById('videoSel');
+    sel.innerHTML = '<option value="">Cargando…</option>';
+    const r = await fetch('/.netlify/functions/video_list?page=1&pageSize=100&q=', { headers:{ 'Authorization':'Bearer '+token } });
+    if(!r.ok){ sel.innerHTML = '<option value="">Error</option>'; return; }
+    const data = await r.json();
+    sel.innerHTML = '<option value="">— Selecciona un video —</option>';
+    data.rows.forEach(v=>{
+      const opt = document.createElement('option');
+      opt.value = v.id_video;
+      opt.textContent = `${v.titulo} — ${v.objetivo}`;
+      sel.appendChild(opt);
+    });
+  }
+
+  // Tabla de usuarios (reusa admin_users_list)
+  const utbody = document.getElementById('utbody');
+  const uq = document.getElementById('uq');
+  const upageSizeEl = document.getElementById('upageSize');
+  const uprev = document.getElementById('uprev'), unext = document.getElementById('unext');
+  const upageLbl = document.getElementById('upageLbl'), utotalLbl = document.getElementById('utotalLbl');
+  let upage = 1, selectedUserId = null;
+
+  function rowSelect(tr){
+    utbody.querySelectorAll('tr').forEach(r=>r.classList.remove('table-active'));
+    tr.classList.add('table-active');
+  }
+
+  async function loadUsers(){
+    const params = new URLSearchParams({
+      page: upage, pageSize: upageSizeEl.value, q: uq.value.trim(), activo: 1 // solo activos
+    });
+    const r = await fetch('/.netlify/functions/admin_users_list?'+params.toString(), { headers:{ 'Authorization':'Bearer '+token } });
+    if(!r.ok){ utbody.innerHTML = ''; utotalLbl.textContent='Error'; return; }
+    const data = await r.json();
+    utbody.innerHTML = '';
+    data.rows.forEach((u,idx)=>{
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${(data.page-1)*data.pageSize + idx + 1}</td>
+        <td><img class="avatar" src="/.netlify/functions/avatar?usuario_id=${u.id}&jwt=${encodeURIComponent(token)}" onerror="this.src='Img/default-avatar.png'"></td>
+        <td>${u.nombre_completo}</td>
+        <td><code>${u.correo}</code></td>`;
+      tr.addEventListener('click', ()=>{
+        selectedUserId = u.id;
+        rowSelect(tr);
+        loadAssignments();
+      });
+      utbody.appendChild(tr);
+    });
+    utotalLbl.textContent = `${data.total} usuario(s)`;
+    upageLbl.textContent = data.page;
+    uprev.disabled = data.page<=1; unext.disabled = data.page*data.pageSize >= data.total;
+  }
+
+  // Asignaciones del usuario seleccionado
+  const atbody = document.getElementById('atbody');
+  async function loadAssignments(){
+    if(!selectedUserId){ atbody.innerHTML = '<tr><td colspan="6" class="text-muted">Selecciona un usuario…</td></tr>'; return; }
+    const r = await fetch('/.netlify/functions/video_assign_list?id_usuario='+selectedUserId, { headers:{ 'Authorization':'Bearer '+token } });
+    if(!r.ok){ atbody.innerHTML = '<tr><td colspan="6">Error</td></tr>'; return; }
+    const data = await r.json();
+    atbody.innerHTML = '';
+    if(!data.rows.length){
+      atbody.innerHTML = '<tr><td colspan="6" class="text-muted">Sin asignaciones</td></tr>';
+      return;
+    }
+    data.rows.forEach((a,idx)=>{
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${idx+1}</td>
+        <td>${a.titulo}</td>
+        <td>${a.objetivo}</td>
+        <td><a href="${a.video_url}" target="_blank">${a.video_url}</a></td>
+        <td>${a.observacion || ''}</td>
+        <td>${new Date(a.updated_at).toLocaleString()}</td>`;
+      atbody.appendChild(tr);
+    });
+  }
+
+  // Asignar
+  document.getElementById('btnAsignar').addEventListener('click', async ()=>{
+    const id_video = Number(document.getElementById('videoSel').value);
+    const observacion = document.getElementById('obs').value.trim();
+    if(!selectedUserId){ alert('Selecciona un usuario'); return; }
+    if(!id_video){ alert('Selecciona un video'); return; }
+    const r = await fetch('/.netlify/functions/video_assign', {
+      method:'POST',
+      headers:{ 'Authorization':'Bearer '+token, 'Content-Type':'application/json' },
+      body: JSON.stringify({ id_usuario: selectedUserId, id_video, observacion })
+    });
+    const data = await r.json().catch(()=>null);
+    if(!r.ok){ alert(data?.error || 'No se pudo asignar'); return; }
+    document.getElementById('obs').value = '';
+    await loadAssignments();
+    alert('Asignado correctamente');
+  });
+
+  document.getElementById('ubtn').addEventListener('click', ()=>{ upage=1; loadUsers(); });
+  uprev.addEventListener('click', ()=>{ if(upage>1){ upage--; loadUsers(); }});
+  unext.addEventListener('click', ()=>{ upage++; loadUsers(); });
+
+  // init
+  loadVideos();
+  loadUsers();
+})();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
