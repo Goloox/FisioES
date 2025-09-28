@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Calendario • FISIOES</title>
+
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/main.min.css" rel="stylesheet">
+<link rel="icon" href="Img/logo.jpg" type="image/jpg">
+
+<style>
+  #calendar { max-width: 1100px; margin: 0 auto; }
+  .fc .fc-toolbar-title{ font-size:1.25rem; }
+</style>
+
+<script>
+(function(){
+  const t=localStorage.getItem('token'), u=localStorage.getItem('user');
+  if(!t||!u){ location.href='login.html'; return; }
+  try{ if(JSON.parse(u).rol_id!==1) location.href='homecliente.html'; }catch{ localStorage.clear(); location.href='login.html';}
+})();
+</script>
+</head>
+<body class="bg-light">
+
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark sticky-top">
+  <div class="container">
+    <a class="navbar-brand d-flex align-items-center gap-2" href="homeadmin.html">
+      <img src="Img/logo.jpg" alt="FISIOES" style="height:40px;width:40px;border-radius:6px;object-fit:cover;">
+      <span class="fw-semibold">FISIOES • Calendario</span>
+    </a>
+    <div class="ms-auto d-flex align-items-center gap-2">
+      <a href="homeadmin.html" class="btn btn-outline-light btn-sm"><i class="fa-solid fa-house me-1"></i> Panel</a>
+      <a href="admin-usuarios.html" class="btn btn-outline-primary btn-sm"><i class="fa-solid fa-user-gear me-1"></i> Usuarios</a>
+      <a href="admin-videos.html" class="btn btn-outline-warning btn-sm"><i class="fa-solid fa-circle-plus me-1"></i> Añadir video</a>
+      <a href="admin-videos-asignar.html" class="btn btn-outline-info btn-sm"><i class="fa-solid fa-list-check me-1"></i> Asignar videos</a>
+      <button id="btnLogout" class="btn btn-outline-light btn-sm"><i class="fa-solid fa-right-from-bracket me-1"></i> Salir</button>
+    </div>
+  </div>
+</nav>
+
+<main class="container py-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h4 mb-0">Calendario de citas</h1>
+    <div class="small">
+      <span class="badge text-bg-warning text-dark me-1">Espera</span>
+      <span class="badge text-bg-success me-1">Aceptada</span>
+      <span class="badge text-bg-danger">Cancelada</span>
+    </div>
+  </div>
+  <div id="calendar" class="bg-white p-2 rounded-4 shadow-sm"></div>
+</main>
+
+<!-- Modal detalle -->
+<div class="modal fade" id="evtModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 id="evtTitle" class="modal-title">Cita</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="evtBody" class="small"></div>
+      </div>
+      <div class="modal-footer">
+        <button id="btnCancelar" class="btn btn-outline-danger"><i class="fa-solid fa-xmark me-1"></i> Cancelar</button>
+        <button id="btnAceptar" class="btn btn-success"><i class="fa-solid fa-check me-1"></i> Aceptar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"></script>
+<script>
+(function(){
+  const token = localStorage.getItem('token');
+  document.getElementById('btnLogout').addEventListener('click', ()=>{ localStorage.clear(); location.href='login.html'; });
+
+  const modal = new bootstrap.Modal('#evtModal');
+  const $title = document.getElementById('evtTitle');
+  const $body  = document.getElementById('evtBody');
+  const $btnOk = document.getElementById('btnAceptar');
+  const $btnKo = document.getElementById('btnCancelar');
+
+  let currentEvent = null;
+
+  function colorByEstado(estado){
+    if(estado==2) return '#198754'; // success
+    if(estado==3) return '#dc3545'; // danger
+    return '#ffc107'; // warning
+  }
+
+  const calendarEl = document.getElementById('calendar');
+  const calendar = new FullCalendar.Calendar(calendarEl, {
+    locale: 'es',
+    height: 'auto',
+    initialView: 'dayGridMonth',
+    headerToolbar: {
+      left: 'prev,next today',
+      center: 'title',
+      right: 'dayGridMonth,timeGridWeek,timeGridDay,listWeek'
+    },
+    navLinks: true,
+    nowIndicator: true,
+    editable: true,          // permitir arrastrar
+    eventOverlap: true,
+    eventTimeFormat: { hour: '2-digit', minute: '2-digit' },
+
+    // Carga remota con headers
+    events: async (info, success, failure) => {
+      const url = `/.netlify/functions/calendar_events?start=${encodeURIComponent(info.startStr)}&end=${encodeURIComponent(info.endStr)}`;
+      try{
+        const r = await fetch(url, { headers:{ Authorization: 'Bearer '+token }});
+        const data = await r.json();
+        // mapear a eventos con color
+        const events = data.rows.map(e => ({
+          id: String(e.id),
+          title: `${e.titulo} — ${e.cliente}`,
+          start: e.start,
+          end: e.end || null,
+          backgroundColor: colorByEstado(Number(e.estado)),
+          borderColor: colorByEstado(Number(e.estado)),
+          allDay: false,
+          extendedProps: e
+        }));
+        success(events);
+      }catch(err){
+        failure(err);
+      }
+    },
+
+    eventClick: (arg) => {
+      const e = arg.event.extendedProps;
+      currentEvent = arg.event;
+      $title.textContent = arg.event.title;
+      $body.innerHTML = `
+        <div><strong>Fecha:</strong> ${new Date(arg.event.start).toLocaleString()}</div>
+        <div><strong>Cliente:</strong> ${e.cliente} <code>${e.correo}</code></div>
+        <div><strong>Estado:</strong> ${e.estado==1?'En espera':(e.estado==2?'Aceptado':'Cancelado')}</div>
+        <div class="mt-2"><strong>Título:</strong> ${e.titulo}</div>
+        <div><strong>Descripción:</strong> ${e.descripcion||'<span class="text-muted">—</span>'}</div>
+      `;
+      // botones según estado
+      $btnOk.disabled = (e.estado==2);
+      $btnKo.disabled = (e.estado==3);
+      modal.show();
+    },
+
+    // reprogramación por drag & drop
+    eventDrop: async (info) => {
+      const id = Number(info.event.id);
+      const fecha_iso = info.event.start.toISOString();
+      const ok = confirm('¿Reprogramar esta cita para: ' + new Date(fecha_iso).toLocaleString() + '?');
+      if(!ok){ info.revert(); return; }
+      const r = await fetch('/.netlify/functions/calendar_move', {
+        method:'POST',
+        headers:{ Authorization:'Bearer '+token, 'Content-Type':'application/json' },
+        body: JSON.stringify({ id_agendar:id, fecha:fecha_iso })
+      });
+      if(!r.ok){ alert('No se pudo reprogramar'); info.revert(); }
+    }
+  });
+
+  // acciones modal
+  async function setEstado(estado){
+    if(!currentEvent) return;
+    const id = Number(currentEvent.id);
+    const r = await fetch('/.netlify/functions/agendar_set_estado', {
+      method:'POST',
+      headers:{ Authorization:'Bearer '+token, 'Content-Type':'application/json' },
+      body: JSON.stringify({ id_agendar:id, estado })
+    });
+    if(!r.ok){ alert('No se pudo actualizar'); return; }
+    modal.hide();
+    calendar.refetchEvents();
+  }
+  $btnOk.addEventListener('click', ()=> setEstado(2));
+  $btnKo.addEventListener('click', ()=> setEstado(3));
+
+  calendar.render();
+})();
+</script>
+</body>
+</html>
