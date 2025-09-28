@@ -29,7 +29,6 @@ export const handler = async (event) => {
   await client.connect();
   try {
     if (role !== 1) {
-      // Solo clientes asignados pueden ver
       const chk = await client.query(
         `SELECT 1 FROM fisio.video_asignacion WHERE id_video=$1 AND id_usuario=$2 LIMIT 1`,
         [id, claimUserId]
@@ -49,7 +48,7 @@ export const handler = async (event) => {
     const { filename, mime_type, archivo } = r.rows[0];
 
     // Normaliza a Buffer (PG puede devolver Buffer o hex)
-    const buf = Buffer.isBuffer(archivo)
+    const fullBuf = Buffer.isBuffer(archivo)
       ? archivo
       : (archivo?.type === "Buffer" && Array.isArray(archivo?.data))
         ? Buffer.from(archivo.data)
@@ -57,17 +56,53 @@ export const handler = async (event) => {
           ? Buffer.from(archivo.slice(2), "hex")
           : Buffer.from(archivo);
 
-    const disp = qs.download ? `attachment; filename="${filename}"` : `inline; filename="${filename}"`;
+    const total = fullBuf.length;
+    const headers = event.headers || {};
+    const range = headers.range || headers.Range;
 
+    // Disposition
+    const disp = qs.download ? `attachment; filename="${filename}"` : `inline; filename="${filename}"`;
+    const ct   = mime_type || "video/mp4";
+
+    if (range) {
+      // Soporte byte-range (iOS/Android Safari/Chrome lo requieren)
+      const m = /^bytes=(\d*)-(\d*)$/.exec(range);
+      if (!m) return { statusCode: 416, body: "Range inválido" };
+
+      let start = m[1] ? parseInt(m[1], 10) : 0;
+      let end   = m[2] ? parseInt(m[2], 10) : total - 1;
+      if (isNaN(start) || start < 0) start = 0;
+      if (isNaN(end) || end >= total) end = total - 1;
+      if (start > end) return { statusCode: 416, body: "Range inválido" };
+
+      const chunk = fullBuf.slice(start, end + 1);
+      return {
+        statusCode: 206,
+        headers: {
+          "Content-Type": ct,
+          "Content-Disposition": disp,
+          "Accept-Ranges": "bytes",
+          "Content-Range": `bytes ${start}-${end}/${total}`,
+          "Content-Length": String(chunk.length),
+          "Cache-Control": "private, max-age=300"
+        },
+        isBase64Encoded: true,
+        body: chunk.toString("base64")
+      };
+    }
+
+    // Respuesta completa
     return {
       statusCode: 200,
       headers: {
-        "Content-Type": mime_type || "video/mp4",
+        "Content-Type": ct,
         "Content-Disposition": disp,
+        "Accept-Ranges": "bytes",
+        "Content-Length": String(total),
         "Cache-Control": "private, max-age=300"
       },
       isBase64Encoded: true,
-      body: buf.toString("base64")
+      body: fullBuf.toString("base64")
     };
   } catch (e) {
     return { statusCode: 500, body: "Error: " + e.message };
