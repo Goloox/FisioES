@@ -203,7 +203,7 @@
       upageLbl.textContent  = data.page;
       uprev.disabled = data.page<=1;
       unext.disabled = data.page*data.pageSize >= data.total;
-    }catch(e){
+    }catch{
       utbody.innerHTML = '<tr><td colspan="4">Error de red</td></tr>';
     }
   }
@@ -235,7 +235,7 @@
     btnIrAsignar.classList.remove('disabled');
 
     loadAssignedVideos(u.id);
-    loadCitas(u.id);
+    loadCitas(u.id);         // <- ahora por id_cliente (agendar_cita)
   }
 
   // Videos asignados
@@ -260,23 +260,32 @@
           <td>${new Date(a.updated_at).toLocaleString()}</td>`;
         tbody.appendChild(tr);
       });
-    }catch(e){
+    }catch{
       tbody.innerHTML = '<tr><td colspan="6">Error de red</td></tr>';
     }
   }
 
-  // Citas + imágenes
+  // Helper estado → badge
+  function estadoBadge(e){
+    if(e===2) return '<span class="badge text-bg-success">Aceptado</span>';
+    if(e===3) return '<span class="badge text-bg-danger">Cancelado</span>';
+    return '<span class="badge text-bg-warning text-dark">En espera</span>'; // 1 u otros
+  }
+
+  // Citas + imágenes (por id_cliente desde agendar_cita)
   async function loadCitas(idUsuario){
     const wrap = document.getElementById('citasWrap');
     wrap.innerHTML = '<div class="text-muted">Cargando…</div>';
     try{
-      const r = await fetch('/.netlify/functions/citas_list?id_usuario='+idUsuario, { headers:{ Authorization:'Bearer '+token }});
+      const r = await fetch('/.netlify/functions/citas_list?id_cliente='+idUsuario, { headers:{ Authorization:'Bearer '+token }});
       const {ok, data, text} = await readJsonOrText(r);
       if(!ok){ wrap.innerHTML = `<div>${data?.error||text||'Error'}</div>`; return; }
       if(!data.rows.length){ wrap.innerHTML = '<div class="text-muted">Sin citas</div>'; return; }
 
       const acc = document.createElement('div');
       acc.className = 'accordion';
+      acc.id = 'accordionCitas';
+
       data.rows.forEach((c,i)=>{
         const item = document.createElement('div');
         item.className = 'accordion-item';
@@ -284,6 +293,7 @@
         item.innerHTML = `
           <h2 class="accordion-header" id="${hId}">
             <button class="accordion-button ${i? 'collapsed':''}" type="button" data-bs-toggle="collapse" data-bs-target="#${bId}">
+              <div class="me-2">${estadoBadge(Number(c.estado))}</div>
               <div class="me-2 badge text-bg-secondary">${new Date(c.fecha).toLocaleString()}</div>
               <strong>${c.titulo}</strong>
             </button>
@@ -310,10 +320,10 @@
           });
         }
       });
-      acc.id = 'accordionCitas';
+
       wrap.innerHTML = '';
       wrap.appendChild(acc);
-    }catch(e){
+    }catch{
       wrap.innerHTML = '<div>Error de red</div>';
     }
   }
