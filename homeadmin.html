@@ -106,6 +106,31 @@
         </div>
       </div>
 
+      <!-- PENDIENTES de agendar_cita -->
+      <div class="card border-0 shadow-sm rounded-4 mb-4">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <h3 class="h6 mb-0">Solicitudes de cita (en espera)</h3>
+            <div class="small text-muted" id="pendTotal">—</div>
+          </div>
+          <div class="table-responsive">
+            <table class="table table-sm align-middle">
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Cliente</th>
+                  <th>Correo</th>
+                  <th>Título</th>
+                  <th>Estado</th>
+                  <th class="text-end">Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="pendBody"><tr><td colspan="6" class="text-muted">Cargando…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
       <!-- Videos asignados -->
       <div class="card border-0 shadow-sm rounded-4 mb-4">
         <div class="card-body">
@@ -176,7 +201,7 @@
   const unext    = document.getElementById('unext');
   const upageLbl = document.getElementById('upageLbl');
   const utotalLbl= document.getElementById('utotalLbl');
-  let upage = 1, selectedUser = null;
+  let upage = 1, selectedUser = null, autoSelectEmail = '';
 
   async function loadUsers(){
     utbody.innerHTML = '<tr><td colspan="4" class="text-muted">Cargando…</td></tr>';
@@ -191,6 +216,7 @@
       }
       data.rows.forEach((u,idx)=>{
         const tr = document.createElement('tr');
+        tr.dataset.email = u.correo;
         tr.innerHTML = `
           <td>${(data.page-1)*data.pageSize + idx + 1}</td>
           <td><img class="avatar-sm" src="/.netlify/functions/avatar?usuario_id=${u.id}&jwt=${encodeURIComponent(token)}" onerror="this.src='${FALLBACK}'"></td>
@@ -199,6 +225,12 @@
         tr.addEventListener('click', ()=>{ selectUser(u); utbody.querySelectorAll('tr').forEach(r=>r.classList.remove('table-active')); tr.classList.add('table-active'); });
         utbody.appendChild(tr);
       });
+      // autoselect si viene de "Ver usuario" en pendientes
+      if (autoSelectEmail) {
+        const tr = [...utbody.querySelectorAll('tr')].find(x => x.dataset.email === autoSelectEmail);
+        if (tr) tr.click();
+        autoSelectEmail = '';
+      }
       utotalLbl.textContent = `${data.total} usuario(s)`;
       upageLbl.textContent  = data.page;
       uprev.disabled = data.page<=1;
@@ -211,7 +243,84 @@
   uprev.addEventListener('click', ()=>{ if(upage>1){ upage--; loadUsers(); }});
   unext.addEventListener('click', ()=>{ upage++; loadUsers(); });
 
-  // ---------- PANE DERECHO ----------
+  // ---------- PENDIENTES ----------
+  const pendBody  = document.getElementById('pendBody');
+  const pendTotal = document.getElementById('pendTotal');
+
+  function badgeEstado(e){
+    if(e===2) return '<span class="badge text-bg-success">Aceptado</span>';
+    if(e===3) return '<span class="badge text-bg-danger">Cancelado</span>';
+    return '<span class="badge text-bg-warning text-dark">En espera</span>';
+  }
+
+  async function loadPendientes(){
+    pendBody.innerHTML = '<tr><td colspan="6" class="text-muted">Cargando…</td></tr>';
+    try{
+      const r = await fetch('/.netlify/functions/agendar_list_pending?page=1&pageSize=50', { headers:{ Authorization:'Bearer '+token }});
+      const {ok, data, text} = await readJsonOrText(r);
+      if(!ok){ pendBody.innerHTML = `<tr><td colspan="6">${data?.error||text||'Error'}</td></tr>`; pendTotal.textContent='—'; return; }
+      pendBody.innerHTML = '';
+      pendTotal.textContent = `${data.total} en espera`;
+      if(!data.rows.length){
+        pendBody.innerHTML = '<tr><td colspan="6" class="text-muted">No hay solicitudes en espera</td></tr>';
+        return;
+      }
+      data.rows.forEach(p=>{
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${new Date(p.fecha).toLocaleString()}</td>
+          <td>${p.nombre_completo}</td>
+          <td><code>${p.correo}</code></td>
+          <td>${p.titulo}</td>
+          <td>${badgeEstado(Number(p.estado))}</td>
+          <td class="text-end">
+            <button class="btn btn-sm btn-outline-secondary me-1 ver-usuario" data-email="${p.correo}"><i class="fa-solid fa-user"></i></button>
+            <button class="btn btn-sm btn-success me-1 btn-aceptar" data-id="${p.id}"><i class="fa-solid fa-check"></i> Aceptar</button>
+            <button class="btn btn-sm btn-outline-danger btn-cancelar" data-id="${p.id}"><i class="fa-solid fa-xmark"></i> Cancelar</button>
+          </td>`;
+        pendBody.appendChild(tr);
+      });
+
+      pendBody.querySelectorAll('.btn-aceptar').forEach(b=>{
+        b.addEventListener('click', ()=> setEstado(Number(b.dataset.id), 2));
+      });
+      pendBody.querySelectorAll('.btn-cancelar').forEach(b=>{
+        b.addEventListener('click', ()=> setEstado(Number(b.dataset.id), 3));
+      });
+      pendBody.querySelectorAll('.ver-usuario').forEach(b=>{
+        b.addEventListener('click', ()=>{
+          uq.value = b.dataset.email;
+          autoSelectEmail = b.dataset.email;
+          upage = 1;
+          loadUsers();
+          // desplaza vista hacia la lista
+          document.querySelector('.row-selectable').scrollIntoView({behavior:'smooth', block:'start'});
+        });
+      });
+
+    }catch{
+      pendBody.innerHTML = '<tr><td colspan="6">Error de red</td></tr>';
+      pendTotal.textContent='—';
+    }
+  }
+
+  async function setEstado(id_agendar, estado){
+    if(estado===3 && !confirm('¿Cancelar esta cita?')) return;
+    const r = await fetch('/.netlify/functions/agendar_set_estado', {
+      method:'POST',
+      headers:{ Authorization:'Bearer '+token, 'Content-Type':'application/json' },
+      body: JSON.stringify({ id_agendar, estado })
+    });
+    const {ok, data, text} = await readJsonOrText(r);
+    if(!ok){ alert(data?.error||text||'No se pudo actualizar'); return; }
+    await loadPendientes();
+    // si estoy mirando ese usuario, refresco sus citas
+    if (selectedUser && Number(data?.row?.id_cliente) === Number(selectedUser.id)) {
+      loadCitas(selectedUser.id);
+    }
+  }
+
+  // ---------- PANE DERECHO (ficha, videos, citas) ----------
   const uAvatar = document.getElementById('uAvatar');
   const uNombre = document.getElementById('uNombre');
   const uLinea  = document.getElementById('uLinea');
@@ -220,25 +329,23 @@
 
   function selectUser(u){
     selectedUser = u;
-    // ficha
     uAvatar.src = '/.netlify/functions/avatar?usuario_id='+u.id+'&jwt='+encodeURIComponent(token);
     uAvatar.onerror = ()=> uAvatar.src = FALLBACK;
     uNombre.textContent = u.nombre_completo;
     uLinea.innerHTML = `
       <span class="me-3"><i class="fa-solid fa-envelope me-1"></i>${u.correo}</span>
-      <span class="me-3"><i class="fa-solid fa-id-card me-1"></i>${u.cedula}</span>
+      <span class="me-3"><i class="fa-solid fa-id-card me-1"></i>${u.cedula||'-'}</span>
       <span class="me-3"><i class="fa-solid fa-user-shield me-1"></i>${u.rol_id===1?'ADMIN':'CLIENTE'}</span>
-      <span><i class="fa-regular fa-clock me-1"></i>Creado: ${new Date(u.created_at).toLocaleString()}</span>
+      <span><i class="fa-regular fa-clock me-1"></i>Creado: ${u.created_at ? new Date(u.created_at).toLocaleString() : '-'}</span>
     `;
     uEstado.className = 'badge '+(u.activo===1?'text-bg-success':'text-bg-secondary');
     uEstado.textContent = u.activo===1?'Activo':'Inactivo';
     btnIrAsignar.classList.remove('disabled');
 
     loadAssignedVideos(u.id);
-    loadCitas(u.id);         // <- ahora por id_cliente (agendar_cita)
+    loadCitas(u.id);
   }
 
-  // Videos asignados
   async function loadAssignedVideos(idUsuario){
     const tbody = document.getElementById('vtbody');
     tbody.innerHTML = '<tr><td colspan="6" class="text-muted">Cargando…</td></tr>';
@@ -265,14 +372,12 @@
     }
   }
 
-  // Helper estado → badge
   function estadoBadge(e){
     if(e===2) return '<span class="badge text-bg-success">Aceptado</span>';
     if(e===3) return '<span class="badge text-bg-danger">Cancelado</span>';
-    return '<span class="badge text-bg-warning text-dark">En espera</span>'; // 1 u otros
+    return '<span class="badge text-bg-warning text-dark">En espera</span>';
   }
 
-  // Citas + imágenes (por id_cliente desde agendar_cita)
   async function loadCitas(idUsuario){
     const wrap = document.getElementById('citasWrap');
     wrap.innerHTML = '<div class="text-muted">Cargando…</div>';
@@ -306,7 +411,6 @@
           </div>`;
         acc.appendChild(item);
 
-        // Galería
         if(c.images && c.images.length){
           const gal = item.querySelector('#gal_'+c.id_cita);
           c.images.forEach(imgId=>{
@@ -330,6 +434,7 @@
 
   // init
   loadUsers();
+  loadPendientes();
 })();
 </script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
