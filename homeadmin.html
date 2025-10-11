@@ -29,23 +29,48 @@
 </head>
 <body class="bg-light">
 
+<!-- NAVBAR responsive -->
 <nav class="navbar navbar-expand-lg navbar-dark bg-dark sticky-top">
   <div class="container">
     <a class="navbar-brand d-flex align-items-center gap-2" href="Default.html">
       <img src="Img/logo.jpg" alt="FISIOES" style="height:40px;width:40px;border-radius:6px;object-fit:cover;">
       <span class="fw-semibold">FISIOES</span>
     </a>
-    <div class="ms-auto d-flex align-items-center gap-3">
-      <img id="avatarImg" class="avatar" alt="Avatar">
-      <span id="adminName" class="text-white-50 small"></span>
-      <a href="admin-usuarios.html" class="btn btn-outline-primary btn-sm"><i class="fa-solid fa-user-gear me-1"></i> Usuarios</a>
-      <a href="admin-videos.html" class="btn btn-outline-warning btn-sm"><i class="fa-solid fa-circle-plus me-1"></i> Añadir video</a>
-      <a href="admin-videos-asignar.html" class="btn btn-outline-info btn-sm"><i class="fa-solid fa-list-check me-1"></i> Asignar videos</a>
-      <a href="admin-calendario.html" class="btn btn-outline-light btn-sm">
-        <i class="fa-solid fa-calendar-days me-1"></i> Calendario
-      </a>
-      <a href="profile.html" class="btn btn-outline-secondary btn-sm"><i class="fa-solid fa-id-badge me-1"></i> Perfil</a>
-      <button id="btnLogout" class="btn btn-outline-light btn-sm"><i class="fa-solid fa-right-from-bracket me-1"></i> Salir</button>
+
+    <!-- Botón hamburguesa -->
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#adminNavbar" aria-controls="adminNavbar" aria-expanded="false" aria-label="Toggle navigation">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+
+    <!-- Contenido colapsable -->
+    <div class="collapse navbar-collapse" id="adminNavbar">
+      <ul class="navbar-nav ms-auto align-items-lg-center">
+        <li class="nav-item me-lg-2">
+          <a href="admin-usuarios.html" class="btn btn-outline-primary btn-sm w-100 my-1 my-lg-0"><i class="fa-solid fa-user-gear me-1"></i> Usuarios</a>
+        </li>
+        <li class="nav-item me-lg-2">
+          <a href="admin-videos.html" class="btn btn-outline-warning btn-sm w-100 my-1 my-lg-0"><i class="fa-solid fa-circle-plus me-1"></i> Añadir video</a>
+        </li>
+        <li class="nav-item me-lg-2">
+          <a href="admin-videos-asignar.html" class="btn btn-outline-info btn-sm w-100 my-1 my-lg-0"><i class="fa-solid fa-list-check me-1"></i> Asignar videos</a>
+        </li>
+        <li class="nav-item me-lg-2">
+          <a href="#citasAdmin" class="btn btn-outline-light btn-sm w-100 my-1 my-lg-0"><i class="fa-solid fa-calendar-check me-1"></i> Citas Admin</a>
+        </li>
+        <li class="nav-item me-lg-2">
+          <a href="admin-calendario.html" class="btn btn-outline-light btn-sm w-100 my-1 my-lg-0"><i class="fa-solid fa-calendar-days me-1"></i> Calendario</a>
+        </li>
+        <li class="nav-item me-lg-2">
+          <a href="profile.html" class="btn btn-outline-secondary btn-sm w-100 my-1 my-lg-0"><i class="fa-solid fa-id-badge me-1"></i> Perfil</a>
+        </li>
+        <li class="nav-item d-flex align-items-center gap-2 ms-lg-3 my-2 my-lg-0">
+          <img id="avatarImg" class="avatar" alt="Avatar">
+          <span id="adminName" class="text-white-50 small d-none d-lg-inline"></span>
+        </li>
+        <li class="nav-item ms-lg-2">
+          <button id="btnLogout" class="btn btn-danger btn-sm w-100 my-1 my-lg-0"><i class="fa-solid fa-right-from-bracket me-1"></i> Salir</button>
+        </li>
+      </ul>
     </div>
   </div>
 </nav>
@@ -93,21 +118,8 @@
       </div>
     </div>
 
-    <!-- Detalle del usuario -->
+    <!-- Columna derecha -->
     <div class="col-12 col-lg-8">
-      <!-- Ficha usuario -->
-      <div class="card border-0 shadow-sm rounded-4 mb-4">
-        <div class="card-body">
-          <div class="d-flex align-items-center gap-3">
-            <img id="uAvatar" class="avatar" src="Img/default-avatar.png" alt="">
-            <div class="flex-fill">
-              <h2 id="uNombre" class="h5 mb-1">Selecciona un usuario</h2>
-              <div id="uLinea" class="text-muted small">—</div>
-            </div>
-            <span id="uEstado" class="badge text-bg-secondary">—</span>
-          </div>
-        </div>
-      </div>
 
       <!-- PENDIENTES -->
       <div class="card border-0 shadow-sm rounded-4 mb-4">
@@ -134,11 +146,54 @@
         </div>
       </div>
 
-      <!-- Videos asignados -->
-      <div class="card border-0 shadow-sm rounded-4 mb-4">
+      <!-- Citas Admin: TODAS aceptadas y futuras -->
+      <div class="card border-0 shadow-sm rounded-4 mb-4" id="citasAdmin">
+        <div class="card-body">
+          <div class="d-flex flex-wrap align-items-end gap-2">
+            <h3 class="h6 mb-0 me-auto">Todas las próximas citas aceptadas</h3>
+            <div>
+              <label class="form-label small">Buscar</label>
+              <input id="cq" class="form-control form-control-sm" placeholder="Nombre, correo o título">
+            </div>
+            <div>
+              <label class="form-label small">Pág.</label>
+              <select id="cpageSize" class="form-select form-select-sm"><option>10</option><option>20</option><option>50</option></select>
+            </div>
+            <button id="cbtn" class="btn btn-sm btn-primary"><i class="fa-solid fa-magnifying-glass"></i></button>
+          </div>
+
+          <div class="table-responsive mt-3">
+            <table class="table table-sm align-middle">
+              <thead>
+                <tr>
+                  <th style="min-width:160px">Fecha</th>
+                  <th>Cliente</th>
+                  <th>Correo</th>
+                  <th>Título</th>
+                  <th>Estado</th>
+                  <th class="text-end">Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="ctbody"><tr><td colspan="6" class="text-muted">Cargando…</td></tr></tbody>
+            </table>
+          </div>
+
+          <div class="d-flex justify-content-between align-items-center">
+            <div class="small text-muted" id="ctotalLbl">—</div>
+            <div class="btn-group">
+              <button id="cprev" class="btn btn-outline-secondary btn-sm">&laquo;</button>
+              <span id="cpageLbl" class="btn btn-outline-secondary btn-sm disabled">1</span>
+              <button id="cnext" class="btn btn-outline-secondary btn-sm">&raquo;</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Videos asignados (por usuario seleccionado) -->
+      <div class="card border-0 shadow-sm rounded-4">
         <div class="card-body">
           <div class="d-flex justify-content-between align-items-center mb-2">
-            <h3 class="h6 mb-0">Videos asignados</h3>
+            <h3 class="h6 mb-0">Videos asignados (usuario seleccionado)</h3>
             <a id="btnIrAsignar" href="admin-videos-asignar.html" class="btn btn-sm btn-outline-info disabled">
               <i class="fa-solid fa-list-check me-1"></i> Asignar
             </a>
@@ -152,13 +207,6 @@
         </div>
       </div>
 
-      <!-- Citas aceptadas y futuras -->
-      <div class="card border-0 shadow-sm rounded-4">
-        <div class="card-body">
-          <h3 class="h6 mb-2">Próximas citas aceptadas</h3>
-          <div id="citasWrap"><div class="text-muted">Selecciona un usuario…</div></div>
-        </div>
-      </div>
     </div>
   </div>
 </main>
@@ -333,7 +381,7 @@ function formatLocal(sqlTs, withSeconds = false) {
       pendBody.querySelectorAll('.btn-estado').forEach(b=>{
         b.addEventListener('click', ()=>{
           const id_cita = Number(b.dataset.id);
-          const estado  = Number(b.dataset.estado); // 1..5
+          const estado  = Number(b.dataset.estado);
           setEstado(id_cita, estado);
         });
       });
@@ -367,12 +415,79 @@ function formatLocal(sqlTs, withSeconds = false) {
     if(!ok){ alert(data?.error||text||'No se pudo actualizar'); return; }
 
     await loadPendientes();
-    if (selectedUser && Number(data?.row?.usuario_id) === Number(selectedUser.id)) {
-      loadCitas(selectedUser.id);
-    }
+    // también refrescamos el tablero global de citas admin
+    await loadCitasAll();
   }
 
-  // ---------- PANE DERECHO (ficha, videos, citas) ----------
+  // ---------- Citas Admin (TODAS aceptadas y futuras, con búsqueda y paginación) ----------
+  const ctbody    = document.getElementById('ctbody');
+  const ctotalLbl = document.getElementById('ctotalLbl');
+  const cpageLbl  = document.getElementById('cpageLbl');
+  const cprev     = document.getElementById('cprev');
+  const cnext     = document.getElementById('cnext');
+  const cpageSz   = document.getElementById('cpageSize');
+  const cq        = document.getElementById('cq');
+  const cbtn      = document.getElementById('cbtn');
+  let cpage = 1;
+
+  async function loadCitasAll(){
+    ctbody.innerHTML = '<tr><td colspan="6" class="text-muted">Cargando…</td></tr>';
+    const qs = new URLSearchParams({ page:cpage, pageSize:cpageSz.value, q:cq.value.trim() });
+    try{
+      const r = await fetch('/.netlify/functions/cita_list_all_upcoming?'+qs, {
+        headers:{ Authorization:'Bearer '+token }
+      });
+      const {ok, data, text} = await readJsonOrText(r);
+      if(!ok){ ctbody.innerHTML = `<tr><td colspan="6">${data?.error||text||'Error'}</td></tr>`; ctotalLbl.textContent='—'; return; }
+      const rows = data.rows||[];
+      ctbody.innerHTML = '';
+      if(!rows.length){
+        ctbody.innerHTML = '<tr><td colspan="6" class="text-muted">Sin próximas citas aceptadas</td></tr>';
+      }
+      rows.forEach(c=>{
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${formatLocal(c.fecha)}</td>
+          <td>${c.nombre_completo}</td>
+          <td><code>${c.correo}</code></td>
+          <td>${c.titulo}</td>
+          <td>${statusBadge(c.estado)}</td>
+          <td class="text-end">
+            <div class="btn-group btn-group-sm">
+              <button class="btn btn-success btn-c-estado" data-id="${c.id_cita}" data-estado="1" title="Aceptar"><i class="fa-solid fa-check"></i></button>
+              <button class="btn btn-outline-warning btn-c-estado" data-id="${c.id_cita}" data-estado="3" title="En espera"><i class="fa-solid fa-hourglass-half"></i></button>
+              <button class="btn btn-outline-secondary btn-c-estado" data-id="${c.id_cita}" data-estado="4" title="Posponer"><i class="fa-solid fa-clock-rotate-left"></i></button>
+              <button class="btn btn-outline-danger btn-c-estado" data-id="${c.id_cita}" data-estado="2" title="Cancelar"><i class="fa-solid fa-xmark"></i></button>
+              <button class="btn btn-outline-primary btn-c-estado" data-id="${c.id_cita}" data-estado="5" title="Finalizar"><i class="fa-solid fa-flag-checkered"></i></button>
+            </div>
+          </td>`;
+        ctbody.appendChild(tr);
+      });
+      ctotalLbl.textContent = `${data.total} cita(s) encontradas`;
+      cpageLbl.textContent  = data.page;
+      cprev.disabled = data.page<=1;
+      cnext.disabled = data.page*data.pageSize >= data.total;
+
+      ctbody.querySelectorAll('.btn-c-estado').forEach(b=>{
+        b.addEventListener('click', async ()=>{
+          const id_cita = Number(b.dataset.id);
+          const estado  = Number(b.dataset.estado);
+          await setEstado(id_cita, estado);
+          // recargar tabla
+          loadCitasAll();
+        });
+      });
+
+    }catch{
+      ctbody.innerHTML = '<tr><td colspan="6">Error de red</td></tr>';
+      ctotalLbl.textContent='—';
+    }
+  }
+  cbtn.addEventListener('click', ()=>{ cpage=1; loadCitasAll(); });
+  cprev.addEventListener('click', ()=>{ if(cpage>1){ cpage--; loadCitasAll(); }});
+  cnext.addEventListener('click', ()=>{ cpage++; loadCitasAll(); });
+
+  // ---------- PANE DERECHO (ficha, videos) ----------
   const uAvatar = document.getElementById('uAvatar');
   const uNombre = document.getElementById('uNombre');
   const uLinea  = document.getElementById('uLinea');
@@ -395,7 +510,6 @@ function formatLocal(sqlTs, withSeconds = false) {
     btnIrAsignar.classList.remove('disabled');
 
     loadAssignedVideos(u.id);
-    loadCitas(u.id);
   }
 
   async function loadAssignedVideos(idUsuario){
@@ -424,82 +538,10 @@ function formatLocal(sqlTs, withSeconds = false) {
     }
   }
 
-  // ----- SOLO citas aceptadas y futuras -----
-  async function loadCitas(idUsuario){
-    const wrap = document.getElementById('citasWrap');
-    wrap.innerHTML = '<div class="text-muted">Cargando…</div>';
-    try{
-      const r = await fetch('/.netlify/functions/citas_list?id_cliente='+idUsuario, { headers:{ Authorization:'Bearer '+token }});
-      const {ok, data, text} = await readJsonOrText(r);
-      if(!ok){ wrap.innerHTML = `<div>${data?.error||text||'Error'}</div>`; return; }
-
-      const rows = Array.isArray(data?.rows) ? data.rows : [];
-      const now = new Date();
-      const upcoming = rows
-        .filter(c => Number(c.estado) === 1)
-        .filter(c => {
-          const d = parseSqlTimestampAsLocal(c.fecha);
-          return d && d.getTime() >= now.getTime();
-        })
-        .sort((a,b) => {
-          const da = parseSqlTimestampAsLocal(a.fecha).getTime();
-          const db = parseSqlTimestampAsLocal(b.fecha).getTime();
-          return da - db;
-        });
-
-      if(!upcoming.length){
-        wrap.innerHTML = '<div class="text-muted">Sin próximas citas aceptadas</div>';
-        return;
-      }
-
-      const acc = document.createElement('div');
-      acc.className = 'accordion';
-      acc.id = 'accordionCitas';
-
-      upcoming.forEach((c,i)=>{
-        const item = document.createElement('div');
-        item.className = 'accordion-item';
-        const hId = 'h'+c.id_cita, bId = 'b'+c.id_cita;
-        item.innerHTML = `
-          <h2 class="accordion-header" id="${hId}">
-            <button class="accordion-button ${i? 'collapsed':''}" type="button" data-bs-toggle="collapse" data-bs-target="#${bId}">
-              <div class="me-2">${statusBadge(c.estado)}</div>
-              <div class="me-2 badge text-bg-secondary">${formatLocal(c.fecha)}</div>
-              <strong>${c.titulo}</strong>
-            </button>
-          </h2>
-          <div id="${bId}" class="accordion-collapse collapse ${i? '':'show'}" data-bs-parent="#accordionCitas">
-            <div class="accordion-body">
-              <p class="mb-2">${c.descripcion || '<span class="text-muted">Sin descripción</span>'}</p>
-              ${c.images && c.images.length ? '<div class="d-flex flex-wrap gap-2" id="gal_'+c.id_cita+'"></div>' : '<div class="text-muted">Sin imágenes</div>'}
-            </div>
-          </div>`;
-        acc.appendChild(item);
-
-        if(c.images && c.images.length){
-          const gal = item.querySelector('#gal_'+c.id_cita);
-          c.images.forEach(imgId=>{
-            const a = document.createElement('a');
-            const src = '/.netlify/functions/cita_image?id='+imgId+'&jwt='+encodeURIComponent(token);
-            a.innerHTML = `<img class="thumb" src="${src}" alt="">`;
-            a.href = src;
-            a.target = '_blank';
-            a.addEventListener('click', (ev)=>{ ev.preventDefault(); document.getElementById('imgModalPic').src = src; new bootstrap.Modal('#imgModal').show(); });
-            gal.appendChild(a);
-          });
-        }
-      });
-
-      wrap.innerHTML = '';
-      wrap.appendChild(acc);
-    }catch{
-      wrap.innerHTML = '<div>Error de red</div>';
-    }
-  }
-
   // init
   loadUsers();
   loadPendientes();
+  loadCitasAll(); // <-- tablero global
 })();
 </script>
 
