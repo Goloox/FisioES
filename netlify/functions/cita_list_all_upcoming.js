@@ -23,42 +23,40 @@ export const handler = async (event) => {
   await client.connect();
 
   try {
-    // Filtro de búsqueda opcional
     const whereSearch = q
       ? `AND (
-            unaccent(u.nombre_completo) ILIKE unaccent('%' || $3 || '%')
-         OR unaccent(u.correo)          ILIKE unaccent('%' || $3 || '%')
-         OR unaccent(c.titulo)          ILIKE unaccent('%' || $3 || '%')
-        )`
+           u.nombre_completo ILIKE '%'||$3||'%' OR
+           u.correo          ILIKE '%'||$3||'%' OR
+           c.titulo          ILIKE '%'||$3||'%'
+         )`
       : "";
 
-    const paramsTotal = q ? [1, /*estado aceptado*/] : [1];
-    const paramsRows  = q ? [pageSize, (page-1)*pageSize, q] : [pageSize, (page-1)*pageSize];
-
-    // NOTA: Comparo con NOW() AT TIME ZONE 'UTC', asumiendo que c.fecha está en UTC o como timestamp consistente
+    // total
     const totalRes = await client.query(
       `SELECT COUNT(*)::int c
          FROM fisio.cita c
          JOIN fisio.usuario u ON u.id = c.usuario_id
         WHERE c.estado = 1
-          AND c.fecha >= (NOW() AT TIME ZONE 'UTC')
+          AND c.fecha >= NOW()
           ${whereSearch}`,
-      q ? [/* dummy to keep $ indexes readable but not needed*/] : []
+      q ? [/*placeholders align only in rows*/] : []
     );
 
     const total = totalRes.rows?.[0]?.c ?? 0;
 
+    // rows
+    const params = q ? [pageSize, (page-1)*pageSize, q] : [pageSize, (page-1)*pageSize];
     const rowsRes = await client.query(
       `SELECT c.id_cita, c.fecha, c.titulo, c.descripcion, c.estado,
               u.id as usuario_id, u.nombre_completo, u.correo
          FROM fisio.cita c
          JOIN fisio.usuario u ON u.id = c.usuario_id
         WHERE c.estado = 1
-          AND c.fecha >= (NOW() AT TIME ZONE 'UTC')
+          AND c.fecha >= NOW()
           ${whereSearch}
         ORDER BY c.fecha ASC
         LIMIT $1 OFFSET $2`,
-      paramsRows
+      params
     );
 
     return {
