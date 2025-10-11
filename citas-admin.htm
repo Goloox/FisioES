@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Citas Admin • FISIOES</title>
+
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" rel="stylesheet">
+<link rel="stylesheet" href="CSS/style.css">
+<link rel="stylesheet" href="CSS/navbar.css">
+<link rel="icon" href="Img/logo.jpg" type="image/jpg">
+<style>
+  .avatar{width:32px;height:32px;border-radius:50%;object-fit:cover;border:2px solid rgba(255,255,255,.6);background:#222}
+</style>
+<script>
+(function(){
+  const t=localStorage.getItem('token'), u=localStorage.getItem('user');
+  if(!t||!u){ location.href='login.html'; return; }
+  try{ if(JSON.parse(u).rol_id!==1) location.href='homecliente.html'; }catch{ localStorage.clear(); location.href='login.html';}
+})();
+</script>
+</head>
+<body class="bg-light">
+
+<!-- NAVBAR responsive -->
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark sticky-top">
+  <div class="container">
+    <a class="navbar-brand d-flex align-items-center gap-2" href="Default.html">
+      <img src="Img/logo.jpg" alt="FISIOES" style="height:40px;width:40px;border-radius:6px;object-fit:cover;">
+      <span class="fw-semibold">FISIOES</span>
+    </a>
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#adminNavbar">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="adminNavbar">
+      <ul class="navbar-nav ms-auto align-items-lg-center">
+        <li class="nav-item me-lg-2"><a href="admin-usuarios.html" class="btn btn-outline-primary btn-sm w-100 my-1 my-lg-0"><i class="fa-solid fa-user-gear me-1"></i> Usuarios</a></li>
+        <li class="nav-item me-lg-2"><a href="admin-videos.html" class="btn btn-outline-warning btn-sm w-100 my-1 my-lg-0"><i class="fa-solid fa-circle-plus me-1"></i> Añadir video</a></li>
+        <li class="nav-item me-lg-2"><a href="admin-videos-asignar.html" class="btn btn-outline-info btn-sm w-100 my-1 my-lg-0"><i class="fa-solid fa-list-check me-1"></i> Asignar videos</a></li>
+        <li class="nav-item me-lg-2"><a href="citas-admin.html" class="btn btn-primary btn-sm w-100 my-1 my-lg-0"><i class="fa-solid fa-calendar-check me-1"></i> Citas Admin</a></li>
+        <li class="nav-item me-lg-2"><a href="admin-calendario.html" class="btn btn-outline-light btn-sm w-100 my-1 my-lg-0"><i class="fa-solid fa-calendar-days me-1"></i> Calendario</a></li>
+        <li class="nav-item me-lg-2"><a href="profile.html" class="btn btn-outline-secondary btn-sm w-100 my-1 my-lg-0"><i class="fa-solid fa-id-badge me-1"></i> Perfil</a></li>
+        <li class="nav-item d-flex align-items-center gap-2 ms-lg-3 my-2 my-lg-0"><img id="avatarImg" class="avatar" alt="Avatar"><span id="adminName" class="text-white-50 small d-none d-lg-inline"></span></li>
+        <li class="nav-item ms-lg-2"><button id="btnLogout" class="btn btn-danger btn-sm w-100 my-1 my-lg-0"><i class="fa-solid fa-right-from-bracket me-1"></i> Salir</button></li>
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<header class="py-5 text-white" style="background-image:url('Img/fisioes.jpg'); background-size:cover; background-position:center;">
+  <div class="container">
+    <h1 class="display-6 fw-bold text-shadow-sm mb-0">Citas (Admin)</h1>
+    <p class="lead mt-2 mb-0">Próximas citas aceptadas de todos los usuarios</p>
+  </div>
+</header>
+
+<main class="container py-4">
+  <div class="card border-0 shadow-sm rounded-4 mb-4">
+    <div class="card-body">
+      <div class="d-flex flex-wrap align-items-end gap-2">
+        <div class="me-auto">
+          <span class="text-muted small">Mostrar solo Estado=Aceptado y fecha futura (automático)</span>
+        </div>
+        <div>
+          <label class="form-label small mb-1">Buscar</label>
+          <input id="q" class="form-control form-control-sm" placeholder="Nombre, correo o título">
+        </div>
+        <div>
+          <label class="form-label small mb-1">Pág.</label>
+          <select id="pageSize" class="form-select form-select-sm"><option>10</option><option>20</option><option>50</option></select>
+        </div>
+        <button id="btnBuscar" class="btn btn-sm btn-primary"><i class="fa-solid fa-magnifying-glass"></i></button>
+      </div>
+
+      <div class="table-responsive mt-3">
+        <table class="table table-sm align-middle">
+          <thead>
+            <tr>
+              <th style="min-width:160px">Fecha</th>
+              <th>Cliente</th>
+              <th>Correo</th>
+              <th>Título</th>
+              <th>Estado</th>
+              <th class="text-end">Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="tbody"><tr><td colspan="6" class="text-muted">Cargando…</td></tr></tbody>
+        </table>
+      </div>
+
+      <div class="d-flex justify-content-between align-items-center">
+        <div class="small text-muted" id="totalLbl">—</div>
+        <div class="btn-group">
+          <button id="prev" class="btn btn-outline-secondary btn-sm">&laquo;</button>
+          <span id="pageLbl" class="btn btn-outline-secondary btn-sm disabled">1</span>
+          <button id="next" class="btn btn-outline-secondary btn-sm">&raquo;</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+// Helpers fecha sin corrimiento
+function parseSqlTimestampAsLocal(s) {
+  if (!s || typeof s !== 'string') return null;
+  const clean = s.replace('Z','').replace(' ', 'T');
+  const m = clean.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?/);
+  if (!m) return null;
+  const [_, yy, MM, dd, hh, mm, ss] = m;
+  return new Date(Number(yy), Number(MM)-1, Number(dd), Number(hh), Number(mm), Number(ss||0));
+}
+function formatLocal(s, withSeconds=false){
+  const d = parseSqlTimestampAsLocal(s);
+  if(!d) return s || '-';
+  return d.toLocaleString(undefined, {year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit', ...(withSeconds?{second:'2-digit'}:{}), hour12:true});
+}
+function statusBadge(e){
+  switch (Number(e)) {
+    case 1: return '<span class="badge text-bg-success">Aceptado</span>';
+    case 2: return '<span class="badge text-bg-danger">Cancelado</span>';
+    case 3: return '<span class="badge text-bg-warning text-dark">En espera</span>';
+    case 4: return '<span class="badge text-bg-secondary">Pospuesto</span>';
+    case 5: return '<span class="badge text-bg-primary">Finalizada</span>';
+    default: return '<span class="badge text-bg-light text-dark">—</span>';
+  }
+}
+</script>
+
+<script>
+(function(){
+  const token = localStorage.getItem('token');
+  if(!token){ location.href='login.html'; return; }
+  // avatar + nombre
+  (async ()=>{
+    const nameEl = document.getElementById('adminName');
+    const u = JSON.parse(localStorage.getItem('user')||'{}');
+    nameEl.textContent = u?.nombre_completo || 'Admin';
+    const img = document.getElementById('avatarImg');
+    img.src = '/.netlify/functions/avatar?me=1&jwt='+encodeURIComponent(token);
+    img.onerror = ()=> img.src = 'Img/default-avatar.png';
+  })();
+  document.getElementById('btnLogout').onclick = ()=>{ localStorage.clear(); location.href='login.html'; };
+
+  async function readJsonOrText(res){
+    const t = await res.text(); let d=null; try{ d=JSON.parse(t); }catch{}
+    return { ok:res.ok, data:d, text:t };
+  }
+
+  const tbody = document.getElementById('tbody');
+  const totalLbl = document.getElementById('totalLbl');
+  const pageLbl  = document.getElementById('pageLbl');
+  const prev     = document.getElementById('prev');
+  const next     = document.getElementById('next');
+  const pageSize = document.getElementById('pageSize');
+  const q        = document.getElementById('q');
+  const btnBuscar= document.getElementById('btnBuscar');
+
+  let page = 1;
+
+  async function load(){
+    tbody.innerHTML = '<tr><td colspan="6" class="text-muted">Cargando…</td></tr>';
+    const qs = new URLSearchParams({ page, pageSize:pageSize.value, q:q.value.trim() });
+    const r = await fetch('/.netlify/functions/cita_list_all_upcoming?'+qs, { headers:{ Authorization:'Bearer '+token }});
+    const {ok, data, text} = await readJsonOrText(r);
+    if(!ok){ tbody.innerHTML = `<tr><td colspan="6">${data?.error||text||'Error'}</td></tr>`; totalLbl.textContent='—'; return; }
+
+    const rows = data.rows || [];
+    tbody.innerHTML = '';
+    if(!rows.length){
+      tbody.innerHTML = '<tr><td colspan="6" class="text-muted">Sin próximas citas aceptadas</td></tr>';
+    }
+    rows.forEach(c=>{
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${formatLocal(c.fecha)}</td>
+        <td>${c.nombre_completo}</td>
+        <td><code>${c.correo}</code></td>
+        <td>${c.titulo}</td>
+        <td>${statusBadge(c.estado)}</td>
+        <td class="text-end">
+          <div class="btn-group btn-group-sm">
+            <a class="btn btn-outline-primary" href="cita-admin.html?id=${encodeURIComponent(c.id_cita)}"><i class="fa-solid fa-pen-to-square"></i> Editar</a>
+          </div>
+        </td>`;
+      tbody.appendChild(tr);
+    });
+
+    totalLbl.textContent = `${data.total} cita(s)`;
+    pageLbl.textContent  = data.page;
+    prev.disabled = data.page<=1;
+    next.disabled = data.page*data.pageSize >= data.total;
+  }
+
+  btnBuscar.onclick = ()=>{ page=1; load(); };
+  prev.onclick = ()=>{ if(page>1){ page--; load(); } };
+  next.onclick = ()=>{ page++; load(); };
+  load();
+})();
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
