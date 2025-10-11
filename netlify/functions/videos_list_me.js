@@ -1,3 +1,4 @@
+// netlify/functions/videos_list_me.js
 import { Client } from "pg";
 import jwt from "jsonwebtoken";
 
@@ -39,7 +40,6 @@ export const handler = async (event) => {
       ORDER BY va.updated_at DESC, va.id DESC
     `;
     const r = await client.query(sql, [userId]);
-
     return {
       statusCode: 200,
       headers: { "Content-Type":"application/json", "Cache-Control":"no-store" },
@@ -47,7 +47,5 @@ export const handler = async (event) => {
     };
   } catch (e) {
     return { statusCode: 500, body: "Error: " + e.message };
-  } finally {
-    try { await client.end(); } catch {}
-  }
+  } finally { try { await client.end(); } catch {} }
 };
