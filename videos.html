@@ -55,20 +55,39 @@ async function load(){
   const grid = document.getElementById('grid');
   grid.innerHTML = '<div class="col-12"><div class="text-muted">Cargando…</div></div>';
   try{
-    const r = await fetch('/.netlify/functions/videos_list_me', {
-      headers:{ Authorization:'Bearer '+token }
-    });
+    // PASAR TAMBIÉN EL TOKEN EN QUERYSTRING (además del header)
+    const url = '/.netlify/functions/videos_list_me?jwt=' + encodeURIComponent(token);
+    const r = await fetch(url, { headers:{ Authorization:'Bearer '+token } });
+
     const t = await r.text(); let data=null; try{ data=JSON.parse(t);}catch{}
-    if(!r.ok){ grid.innerHTML = `<div class="col-12 text-danger">${data?.error||t||'Error'}</div>`; return; }
+
+    if (r.status === 401) {
+      grid.innerHTML = `
+        <div class="col-12">
+          <div class="alert alert-warning">
+            No autorizado. Tu sesión puede haber expirado.
+            <a href="login.html" class="alert-link">Inicia sesión nuevamente</a>.
+          </div>
+        </div>`;
+      return;
+    }
+    if(!r.ok){
+      grid.innerHTML = `<div class="col-12 text-danger">${data?.error||t||'Error'}</div>`;
+      return;
+    }
+
     const rows = data.rows||[];
-    if(!rows.length){ grid.innerHTML = '<div class="col-12"><div class="alert alert-info">No tienes videos asignados todavía.</div></div>'; return; }
+    if(!rows.length){
+      grid.innerHTML = '<div class="col-12"><div class="alert alert-info">No tienes videos asignados todavía.</div></div>';
+      return;
+    }
 
     grid.innerHTML = '';
     rows.forEach(v=>{
       const col = document.createElement('div');
       col.className = 'col-12 col-md-6 col-lg-4';
 
-      const url = '/.netlify/functions/video_stream?id='+encodeURIComponent(v.id_video)+'&jwt='+encodeURIComponent(token);
+      const playUrl = '/.netlify/functions/video_stream?id=' + encodeURIComponent(v.id_video) + '&jwt=' + encodeURIComponent(token);
 
       col.innerHTML = `
         <div class="card h-100 shadow-sm border-0 rounded-4">
@@ -78,7 +97,7 @@ async function load(){
             <p class="small text-muted flex-grow-1">${v.observacion || ''}</p>
             <div class="d-flex justify-content-between align-items-center">
               <small class="text-muted">Actualizado: ${v.updated_at ? new Date(v.updated_at).toLocaleString() : '-'}</small>
-              <a href="${url}" target="_blank" class="btn btn-outline-primary btn-sm">
+              <a href="${playUrl}" target="_blank" class="btn btn-outline-primary btn-sm">
                 <i class="fa-solid fa-play me-1"></i> Ver
               </a>
             </div>
