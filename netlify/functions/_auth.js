@@ -1,4 +1,3 @@
-// netlify/functions/_auth.js
 import jwt from "jsonwebtoken";
 
 export function readToken(event) {
@@ -15,11 +14,8 @@ export function requireUserClaims(event) {
   if (!token) return { ok:false, statusCode:401, error:"Unauthorized" };
   try {
     const claims = jwt.verify(token, process.env.JWT_SECRET);
-    // normalizamos posibles nombres de campo
-    const user_id =
-      Number(claims.id ?? claims.user_id ?? claims.usuario_id ?? claims.sub);
-    const rol_id  =
-      Number(claims.rol_id ?? claims.role_id ?? claims.role ?? claims.rol);
+    const user_id = Number(claims.id ?? claims.user_id ?? claims.usuario_id ?? claims.sub);
+    const rol_id  = Number(claims.rol_id ?? claims.role_id ?? claims.role ?? claims.rol);
     if (!user_id) return { ok:false, statusCode:401, error:"Unauthorized" };
     return { ok:true, claims:{ user_id, rol_id, raw:claims } };
   } catch {
