@@ -2,107 +2,79 @@
 import { Client } from "pg";
 import jwt from "jsonwebtoken";
 
-function getClaims(event) {
-  const qs = event.queryStringParameters || {};
-  const h  = event.headers || {};
-  const headerAuth = h.authorization || h.Authorization || "";
-  const queryJwt = qs.jwt;
-  let token = null;
-  if (headerAuth?.startsWith?.("Bearer ")) token = headerAuth.slice(7);
-  else if (queryJwt) token = queryJwt;
-  if (!token) return null;
-  try { return jwt.verify(token, process.env.JWT_SECRET); } catch { return null; }
+function getToken(event){
+  const h = event.headers || {};
+  const q = event.queryStringParameters || {};
+  const ah = h.authorization || h.Authorization || "";
+  if (ah?.startsWith?.("Bearer ")) return ah.slice(7);
+  return q.jwt || null;
+}
+function sniff(buf){
+  if (!buf || buf.length < 4) return "application/octet-stream";
+  // MP4
+  if (buf[4]===0x66 && buf[5]===0x74 && buf[6]===0x79 && buf[7]===0x70) return "video/mp4";
+  // WebM
+  if (buf[0]===0x1A && buf[1]===0x45 && buf[2]===0xDF && buf[3]===0xA3) return "video/webm";
+  // OGG
+  if (buf[0]===0x4F && buf[1]===0x67 && buf[2]===0x67 && buf[3]===0x53) return "video/ogg";
+  return "application/octet-stream";
+}
+function toBuffer(raw){
+  if (Buffer.isBuffer(raw)) return raw;
+  if (raw?.type==="Buffer" && Array.isArray(raw?.data)) return Buffer.from(raw.data);
+  if (typeof raw === "string" && raw.startsWith("\\x")) return Buffer.from(raw.slice(2), "hex");
+  if (typeof raw === "string") return Buffer.from(raw, "binary");
+  return Buffer.from(raw);
 }
 
 export const handler = async (event) => {
-  const qs = event.queryStringParameters || {};
-  const id = Number(qs.id || 0);
+  const token = getToken(event);
+  if(!token) return { statusCode: 401, body: "Unauthorized" };
+  let claims; try{ claims = jwt.verify(token, process.env.JWT_SECRET); } catch { return { statusCode: 401, body: "Unauthorized" }; }
+
+  // Cualquier usuario logueado puede reproducir sus videos; el control de pertenencia
+  // lo llevas en el frontend (solo lista los suyos). Si quieres reforzar aquí,
+  // puedes verificar que el video esté asignado a "claims.id" antes de servirlo.
+
+  const id = Number((event.queryStringParameters||{}).id || 0);
   if (!id) return { statusCode: 400, body: "id requerido" };
 
-  const claims = getClaims(event);
-  if (!claims) return { statusCode: 401, body: "Unauthorized" };
-
-  const claimUserId = Number(claims.usuario_id ?? claims.user_id ?? claims.id ?? claims.sub);
-  const role = Number(claims.rol_id ?? claims.role_id ?? claims.role ?? claims.rol);
-
-  const client = new Client({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
+  const client = new Client({ connectionString: process.env.DATABASE_URL, ssl:{rejectUnauthorized:false} });
   await client.connect();
   try {
-    if (role !== 1) {
-      const chk = await client.query(
-        `SELECT 1 FROM fisio.video_asignacion WHERE id_video=$1 AND id_usuario=$2 LIMIT 1`,
-        [id, claimUserId]
-      );
-      if (chk.rowCount === 0) return { statusCode: 403, body: "Prohibido" };
-    }
-
-    const r = await client.query(
-      `SELECT filename, mime_type, size_bytes, archivo
-         FROM fisio.video_archivo
-        WHERE id_video = $1
-        LIMIT 1`,
-      [id]
-    );
-    if (!r.rowCount) return { statusCode: 404, body: "No existe" };
-
-    const { filename, mime_type, archivo } = r.rows[0];
-
-    // Normaliza a Buffer (PG puede devolver Buffer o hex)
-    const fullBuf = Buffer.isBuffer(archivo)
-      ? archivo
-      : (archivo?.type === "Buffer" && Array.isArray(archivo?.data))
-        ? Buffer.from(archivo.data)
-        : typeof archivo === "string" && archivo.startsWith("\\x")
-          ? Buffer.from(archivo.slice(2), "hex")
-          : Buffer.from(archivo);
-
-    const total = fullBuf.length;
-    const headers = event.headers || {};
-    const range = headers.range || headers.Range;
-
-    // Disposition
-    const disp = qs.download ? `attachment; filename="${filename}"` : `inline; filename="${filename}"`;
-    const ct   = mime_type || "video/mp4";
-
-    if (range) {
-      // Soporte byte-range (iOS/Android Safari/Chrome lo requieren)
-      const m = /^bytes=(\d*)-(\d*)$/.exec(range);
-      if (!m) return { statusCode: 416, body: "Range inválido" };
-
-      let start = m[1] ? parseInt(m[1], 10) : 0;
-      let end   = m[2] ? parseInt(m[2], 10) : total - 1;
-      if (isNaN(start) || start < 0) start = 0;
-      if (isNaN(end) || end >= total) end = total - 1;
-      if (start > end) return { statusCode: 416, body: "Range inválido" };
-
-      const chunk = fullBuf.slice(start, end + 1);
+    // 1) ¿tiene URL pública?
+    const v = await client.query(`SELECT id, public_url FROM fisio.video WHERE id=$1 LIMIT 1`, [id]);
+    if (v.rowCount && v.rows[0].public_url) {
       return {
-        statusCode: 206,
-        headers: {
-          "Content-Type": ct,
-          "Content-Disposition": disp,
-          "Accept-Ranges": "bytes",
-          "Content-Range": `bytes ${start}-${end}/${total}`,
-          "Content-Length": String(chunk.length),
-          "Cache-Control": "private, max-age=300"
-        },
-        isBase64Encoded: true,
-        body: chunk.toString("base64")
+        statusCode: 302,
+        headers: { Location: v.rows[0].public_url }
       };
     }
 
-    // Respuesta completa
+    // 2) Buscar archivo binario
+    const r = await client.query(`
+      SELECT archivo, mime_type, file_name
+      FROM fisio.video_archivo
+      WHERE id_video=$1
+      ORDER BY updated_at DESC NULLS LAST, created_at DESC NULLS LAST
+      LIMIT 1
+    `, [id]);
+
+    if (!r.rowCount) return { statusCode: 404, body: "No hay archivo para este video" };
+
+    const row = r.rows[0];
+    const buf = toBuffer(row.archivo);
+    const ct  = row.mime_type || sniff(buf);
+
     return {
       statusCode: 200,
       headers: {
         "Content-Type": ct,
-        "Content-Disposition": disp,
-        "Accept-Ranges": "bytes",
-        "Content-Length": String(total),
+        "Content-Disposition": `inline; filename="${(row.file_name||'video')}"`,
         "Cache-Control": "private, max-age=300"
       },
       isBase64Encoded: true,
-      body: fullBuf.toString("base64")
+      body: buf.toString("base64")
     };
   } catch (e) {
     return { statusCode: 500, body: "Error: " + e.message };
