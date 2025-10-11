@@ -1,3 +1,4 @@
+// netlify/functions/video_stream.js
 import { Client } from "pg";
 import jwt from "jsonwebtoken";
 
@@ -26,11 +27,8 @@ function cors(h={}) {
 }
 
 export const handler = async (event) => {
-  if (event.httpMethod === "OPTIONS") {
-    return { statusCode: 204, headers: cors(), body: "" };
-  }
+  if (event.httpMethod === "OPTIONS") return { statusCode: 204, headers: cors(), body: "" };
 
-  // --- auth ---
   const token = getToken(event);
   if (!token) return { statusCode: 401, headers: cors(), body: "Unauthorized" };
 
@@ -40,7 +38,6 @@ export const handler = async (event) => {
 
   const role   = Number(claims.rol_id ?? claims.role_id ?? claims.role ?? claims.rol);
   const userId = Number(claims.id ?? claims.user_id ?? claims.usuario_id ?? claims.sub);
-
   const idVideo = Number((event.queryStringParameters||{}).id || 0);
   if (!idVideo) return { statusCode: 400, headers: cors(), body: "id requerido" };
 
@@ -48,7 +45,7 @@ export const handler = async (event) => {
   await client.connect();
 
   try {
-    // Permisos: admin o asignado
+    // Permiso: admin o video asignado al usuario
     if (role !== 1) {
       const chk = await client.query(
         `SELECT 1 FROM fisio.video_asignacion WHERE id_usuario=$1 AND id_video=$2 LIMIT 1`,
@@ -57,7 +54,7 @@ export const handler = async (event) => {
       if (!chk.rowCount) return { statusCode: 403, headers: cors(), body: "Forbidden" };
     }
 
-    // 1) Intentar binario en DB
+    // 1) Binario en DB (fisio.video_archivo)
     const fa = await client.query(
       `SELECT archivo, COALESCE(content_type,'video/mp4') AS content_type
          FROM fisio.video_archivo
@@ -107,31 +104,26 @@ export const handler = async (event) => {
       };
     }
 
-    // 2) Fallback a URL
+    // 2) Fallback a URL en fisio.video.video_url (http/https o relativa)
     const v = await client.query(`SELECT video_url FROM fisio.video WHERE id_video=$1 LIMIT 1`, [idVideo]);
     if (v.rowCount) {
       let url = (v.rows[0].video_url || "").trim();
 
-      // evita loop: si apunta a video_stream, no redirigimos
-      const thisFn = "/.netlify/functions/video_stream";
+      // evita loop si accidentalmente apunta a esta misma función
       if (url.includes("video_stream")) {
         return { statusCode: 404, headers: cors(), body: "Video no disponible (URL apunta a sí mismo)" };
       }
 
-      // normaliza relativas
+      // normaliza relativas (./netlify/... -> /netlify/...)
       if (url && !/^https?:\/\//i.test(url)) {
-        if (!url.startsWith("/")) url = "/" + url.replace(/^\.\//,"");
+        url = "/" + url.replace(/^\.?\//, "");
       }
 
-      if (url) {
-        return { statusCode: 302, headers: cors({ Location: url }), body: "" };
-      }
+      if (url) return { statusCode: 302, headers: cors({ Location: url }), body: "" };
     }
 
     return { statusCode: 404, headers: cors(), body: "Video no disponible" };
   } catch (e) {
     return { statusCode: 500, headers: cors(), body: "Error: " + e.message };
-  } finally {
-    try { await client.end(); } catch {}
-  }
+  } finally { try { await client.end(); } catch {} }
 };
