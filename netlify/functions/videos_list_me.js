@@ -1,4 +1,3 @@
-// netlify/functions/videos_list_me.js
 import { Client } from "pg";
 import jwt from "jsonwebtoken";
 
@@ -6,7 +5,7 @@ function getToken(event) {
   const h = event.headers || {};
   const q = event.queryStringParameters || {};
   const ah = h.authorization || h.Authorization || "";
-  if (ah?.startsWith?.("Bearer ")) return ah.slice(7);
+  if (ah && ah.startsWith("Bearer ")) return ah.slice(7);
   return q.jwt || null;
 }
 
@@ -21,12 +20,13 @@ export const handler = async (event) => {
   const userId = Number(claims.id ?? claims.user_id ?? claims.usuario_id ?? claims.sub);
   if (!userId) return { statusCode: 401, body: "Unauthorized" };
 
-  const client = new Client({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
+  const client = new Client({ connectionString: process.env.DATABASE_URL, ssl:{rejectUnauthorized:false} });
   await client.connect();
+
   try {
     const sql = `
       SELECT 
-        va.id                 AS id_asignacion,
+        va.id              AS id_asignacion,
         va.id_video,
         va.id_usuario,
         va.observacion,
@@ -42,7 +42,7 @@ export const handler = async (event) => {
 
     return {
       statusCode: 200,
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type":"application/json", "Cache-Control":"no-store" },
       body: JSON.stringify({ rows: r.rows })
     };
   } catch (e) {
