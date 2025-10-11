@@ -2,128 +2,239 @@
 import { Client } from "pg";
 import jwt from "jsonwebtoken";
 
-function getToken(event){
+/* -------- utilidades -------- */
+function getToken(event) {
   const h = event.headers || {};
   const q = event.queryStringParameters || {};
   const ah = h.authorization || h.Authorization || "";
-  if (ah && ah.startsWith("Bearer ")) return ah.slice(7);
-  return q.jwt || null;
+  if (ah?.startsWith?.("Bearer ")) return ah.slice(7);
+  if (q.jwt) return q.jwt;
+  return null;
 }
-function bufferFromPg(raw){
-  if (!raw) return null;
-  if (Buffer.isBuffer(raw)) return raw;
-  if (raw?.type==="Buffer" && Array.isArray(raw?.data)) return Buffer.from(raw.data);
-  if (typeof raw === "string" && raw.startsWith("\\x")) return Buffer.from(raw.slice(2), "hex");
-  if (typeof raw === "string") return Buffer.from(raw, "base64");
-  try { return Buffer.from(raw); } catch { return null; }
+
+function getUserFromJwt(token) {
+  const claims = jwt.verify(token, process.env.JWT_SECRET);
+  // Acepta varias claves posibles
+  const userId =
+    claims.id ??
+    claims.user_id ??
+    claims.usuario_id ??
+    claims.sub ??
+    claims.uid;
+  const rolId =
+    claims.rol_id ??
+    claims.role_id ??
+    claims.role ??
+    claims.rol;
+  return { userId: Number(userId), rolId: Number(rolId) };
 }
-function cors(h={}) {
+
+function sniffContentType(buf) {
+  // MP4 / ISO BMFF: "ftyp" en bytes 4..7
+  if (buf.length >= 12 && buf.toString("ascii", 4, 8) === "ftyp") {
+    return "video/mp4";
+  }
+  // WebM: 1A 45 DF A3 (EBML)
+  if (
+    buf.length >= 4 &&
+    buf[0] === 0x1a &&
+    buf[1] === 0x45 &&
+    buf[2] === 0xdf &&
+    buf[3] === 0xa3
+  ) {
+    return "video/webm";
+  }
+  // Ogg: "OggS"
+  if (buf.length >= 4 && buf.toString("ascii", 0, 4) === "OggS") {
+    return "video/ogg";
+  }
+  return "video/mp4"; // por defecto
+}
+
+function cors(h = {}) {
   return {
-    ...h,
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET,OPTIONS",
-    "Access-Control-Allow-Headers": "Authorization,Range,Content-Type"
+    "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
+    "Access-Control-Allow-Headers": "Authorization, Range, Content-Type",
+    ...h,
   };
 }
 
+/* -------- handler -------- */
 export const handler = async (event) => {
-  if (event.httpMethod === "OPTIONS") return { statusCode: 204, headers: cors(), body: "" };
+  if (event.httpMethod === "OPTIONS") {
+    return { statusCode: 204, headers: cors() };
+  }
 
   const token = getToken(event);
   if (!token) return { statusCode: 401, headers: cors(), body: "Unauthorized" };
 
-  let claims;
-  try { claims = jwt.verify(token, process.env.JWT_SECRET); }
-  catch { return { statusCode: 401, headers: cors(), body: "Unauthorized" }; }
-
-  const role   = Number(claims.rol_id ?? claims.role_id ?? claims.role ?? claims.rol);
-  const userId = Number(claims.id ?? claims.user_id ?? claims.usuario_id ?? claims.sub);
-  const idVideo = Number((event.queryStringParameters||{}).id || 0);
-  if (!idVideo) return { statusCode: 400, headers: cors(), body: "id requerido" };
-
-  const client = new Client({ connectionString: process.env.DATABASE_URL, ssl:{rejectUnauthorized:false} });
-  await client.connect();
-
+  let user;
   try {
-    // Permiso: admin o video asignado al usuario
-    if (role !== 1) {
-      const chk = await client.query(
-        `SELECT 1 FROM fisio.video_asignacion WHERE id_usuario=$1 AND id_video=$2 LIMIT 1`,
-        [userId, idVideo]
+    user = getUserFromJwt(token);
+  } catch {
+    return { statusCode: 401, headers: cors(), body: "Unauthorized" };
+  }
+  if (!user.userId) {
+    return { statusCode: 401, headers: cors(), body: "Unauthorized" };
+  }
+
+  const id_video = Number((event.queryStringParameters || {}).id || 0);
+  if (!id_video) {
+    return { statusCode: 400, headers: cors(), body: "id requerido" };
+  }
+
+  const client = new Client({
+    connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false },
+  });
+
+  await client.connect();
+  try {
+    // 1) Traer el video
+    const vRes = await client.query(
+      `SELECT v.id_video, v.titulo, v.video_url
+         FROM fisio.video v
+        WHERE v.id_video = $1
+        LIMIT 1`,
+      [id_video]
+    );
+    if (!vRes.rowCount) {
+      return { statusCode: 404, headers: cors(), body: "No existe" };
+    }
+    const video = vRes.rows[0];
+
+    // 2) Permisos: admin o asignado
+    if (user.rolId !== 1) {
+      const asRes = await client.query(
+        `SELECT 1
+           FROM fisio.video_asignacion
+          WHERE id_usuario = $1 AND id_video = $2
+          LIMIT 1`,
+        [user.userId, id_video]
       );
-      if (!chk.rowCount) return { statusCode: 403, headers: cors(), body: "Forbidden" };
+      if (!asRes.rowCount) {
+        return { statusCode: 403, headers: cors(), body: "Prohibido" };
+      }
     }
 
-    // 1) Binario en DB (fisio.video_archivo)
-    const fa = await client.query(
-      `SELECT archivo, COALESCE(content_type,'video/mp4') AS content_type
-         FROM fisio.video_archivo
-        WHERE id_video=$1
-        LIMIT 1`, [idVideo]
+    // 3) ¿Existe tabla fisio.video_archivo?
+    const tabRes = await client.query(
+      `SELECT to_regclass('fisio.video_archivo') AS t`
     );
+    const hasArchivoTable = !!tabRes.rows?.[0]?.t;
 
-    if (fa.rowCount) {
-      const buf = bufferFromPg(fa.rows[0].archivo);
-      if (!buf) return { statusCode: 500, headers: cors(), body: "Archivo inválido" };
-
-      const total = buf.length;
-      const ct = fa.rows[0].content_type || "video/mp4";
-      const range = event.headers?.range;
-
-      if (range && /^bytes=/.test(range)) {
-        const [s, e] = range.replace(/bytes=/,'').split('-');
-        let start = parseInt(s,10); let end = e ? parseInt(e,10) : total-1;
-        if (isNaN(start) || start < 0) start = 0;
-        if (isNaN(end) || end >= total) end = total-1;
-        if (start > end) start = 0;
-        const chunk = buf.subarray(start, end+1);
+    // 4) Si hay tabla, intentar leer binario
+    if (hasArchivoTable) {
+      let binRes;
+      try {
+        binRes = await client.query(
+          `SELECT archivo
+             FROM fisio.video_archivo
+            WHERE id_video = $1
+            LIMIT 1`,
+          [id_video]
+        );
+      } catch (e) {
+        // Si la tabla existe pero no tiene la columna "archivo" (muy raro),
+        // devolvemos 500 con claridad.
         return {
-          statusCode: 206,
-          isBase64Encoded: true,
-          headers: cors({
-            "Content-Type": ct,
-            "Content-Length": String(chunk.length),
-            "Accept-Ranges": "bytes",
-            "Content-Range": `bytes ${start}-${end}/${total}`,
-            "Cache-Control": "private, max-age=60"
-          }),
-          body: chunk.toString("base64")
+          statusCode: 500,
+          headers: cors(),
+          body: "Error leyendo video_archivo: " + e.message,
         };
       }
 
+      if (binRes.rowCount) {
+        // Convertir a Buffer (por si llega con forma {type:'Buffer',data:[]})
+        const raw = binRes.rows[0].archivo;
+        const buf =
+          Buffer.isBuffer(raw)
+            ? raw
+            : raw?.type === "Buffer" && Array.isArray(raw?.data)
+            ? Buffer.from(raw.data)
+            : typeof raw === "string" && raw.startsWith("\\x")
+            ? Buffer.from(raw.slice(2), "hex")
+            : Buffer.from(raw || []);
+
+        const total = buf.length;
+        const mime = sniffContentType(buf);
+        const range = event.headers?.range || event.headers?.Range;
+
+        // Streaming con Range
+        if (range) {
+          // Ejemplo: "bytes=0-"
+          const match = /^bytes=(\d+)-(\d+)?$/.exec(range);
+          if (!match) {
+            return {
+              statusCode: 416,
+              headers: cors({
+                "Content-Range": `bytes */${total}`,
+              }),
+              body: "",
+            };
+          }
+          const start = parseInt(match[1], 10);
+          const end = match[2] ? parseInt(match[2], 10) : total - 1;
+          if (start >= total || end >= total || start > end) {
+            return {
+              statusCode: 416,
+              headers: cors({
+                "Content-Range": `bytes */${total}`,
+              }),
+              body: "",
+            };
+          }
+          const chunk = buf.subarray(start, end + 1);
+          return {
+            statusCode: 206,
+            headers: cors({
+              "Content-Type": mime,
+              "Content-Length": String(chunk.length),
+              "Accept-Ranges": "bytes",
+              "Content-Range": `bytes ${start}-${end}/${total}`,
+              "Cache-Control": "private, max-age=0, no-store",
+            }),
+            isBase64Encoded: true,
+            body: chunk.toString("base64"),
+          };
+        }
+
+        // Respuesta completa
+        return {
+          statusCode: 200,
+          headers: cors({
+            "Content-Type": mime,
+            "Content-Length": String(total),
+            "Accept-Ranges": "bytes",
+            "Cache-Control": "private, max-age=0, no-store",
+          }),
+          isBase64Encoded: true,
+          body: buf.toString("base64"),
+        };
+      }
+    }
+
+    // 5) Sin binario → redirigir a video_url (debe ser URL válida o ruta servible)
+    if (video.video_url) {
       return {
-        statusCode: 200,
-        isBase64Encoded: true,
-        headers: cors({
-          "Content-Type": ct,
-          "Content-Length": String(total),
-          "Accept-Ranges": "bytes",
-          "Cache-Control": "private, max-age=60"
-        }),
-        body: buf.toString("base64")
+        statusCode: 302,
+        headers: cors({ Location: video.video_url }),
+        body: "",
       };
     }
 
-    // 2) Fallback a URL en fisio.video.video_url (http/https o relativa)
-    const v = await client.query(`SELECT video_url FROM fisio.video WHERE id_video=$1 LIMIT 1`, [idVideo]);
-    if (v.rowCount) {
-      let url = (v.rows[0].video_url || "").trim();
-
-      // evita loop si accidentalmente apunta a esta misma función
-      if (url.includes("video_stream")) {
-        return { statusCode: 404, headers: cors(), body: "Video no disponible (URL apunta a sí mismo)" };
-      }
-
-      // normaliza relativas (./netlify/... -> /netlify/...)
-      if (url && !/^https?:\/\//i.test(url)) {
-        url = "/" + url.replace(/^\.?\//, "");
-      }
-
-      if (url) return { statusCode: 302, headers: cors({ Location: url }), body: "" };
-    }
-
-    return { statusCode: 404, headers: cors(), body: "Video no disponible" };
+    // Si tampoco hay URL, no hay cómo servirlo
+    return {
+      statusCode: 404,
+      headers: cors(),
+      body: "Video sin archivo ni URL",
+    };
   } catch (e) {
     return { statusCode: 500, headers: cors(), body: "Error: " + e.message };
-  } finally { try { await client.end(); } catch {} }
+  } finally {
+    try {
+      await client.end();
+    } catch {}
+  }
 };
