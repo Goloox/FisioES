@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mis videos • FISIOES</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark sticky-top">
+  <div class="container">
+    <a class="navbar-brand d-flex align-items-center gap-2" href="homecliente.html">
+      <img src="Img/logo.jpg" alt="FISIOES" style="height:40px;width:40px;border-radius:6px;object-fit:cover;">
+      <span class="fw-semibold">FISIOES</span>
+    </a>
+    <div class="ms-auto">
+      <a class="btn btn-outline-light btn-sm" href="citas-historial.html"><i class="fa-solid fa-clock-rotate-left me-1"></i> Historial</a>
+      <button id="logoutBtn" class="btn btn-danger btn-sm ms-2"><i class="fa-solid fa-right-from-bracket"></i> Salir</button>
+    </div>
+  </div>
+</nav>
+
+<header class="py-5 bg-success text-white">
+  <div class="container">
+    <h1 class="h3 mb-0"><i class="fa-solid fa-video me-2"></i>Mis videos asignados</h1>
+  </div>
+</header>
+
+<main class="container py-4">
+  <div id="grid" class="row g-4">
+    <div class="col-12"><div class="text-muted">Cargando…</div></div>
+  </div>
+</main>
+
+<footer class="footer py-3 border-top">
+  <div class="container text-center">
+    <small>© <span id="year"></span> FISIOES</small>
+  </div>
+</footer>
+
+<script>
+document.getElementById('year').textContent = new Date().getFullYear();
+
+const token = localStorage.getItem('token');
+const rawUser = localStorage.getItem('usuario') || localStorage.getItem('user');
+if (!token || !rawUser) location.href = 'login.html';
+let user = {}; try{ user = JSON.parse(rawUser || '{}'); }catch{}
+if (Number(user.rol_id) === 1) location.href = 'Default.html';
+
+document.getElementById('logoutBtn').onclick = ()=>{ localStorage.clear(); location.href='login.html'; };
+
+async function load(){
+  const grid = document.getElementById('grid');
+  grid.innerHTML = '<div class="col-12"><div class="text-muted">Cargando…</div></div>';
+  try{
+    const r = await fetch('/.netlify/functions/videos_list_me', {
+      headers:{ Authorization:'Bearer '+token }
+    });
+    const t = await r.text(); let data=null; try{ data=JSON.parse(t);}catch{}
+    if(!r.ok){ grid.innerHTML = `<div class="col-12 text-danger">${data?.error||t||'Error'}</div>`; return; }
+    const rows = data.rows||[];
+    if(!rows.length){ grid.innerHTML = '<div class="col-12"><div class="alert alert-info">No tienes videos asignados todavía.</div></div>'; return; }
+
+    grid.innerHTML = '';
+    rows.forEach(v=>{
+      const col = document.createElement('div');
+      col.className = 'col-12 col-md-6 col-lg-4';
+
+      const url = '/.netlify/functions/video_stream?id='+encodeURIComponent(v.id_video)+'&jwt='+encodeURIComponent(token);
+
+      col.innerHTML = `
+        <div class="card h-100 shadow-sm border-0 rounded-4">
+          <div class="card-body d-flex flex-column">
+            <h5 class="card-title mb-1">${v.titulo}</h5>
+            <small class="text-muted mb-2">${v.objetivo || ''}</small>
+            <p class="small text-muted flex-grow-1">${v.observacion || ''}</p>
+            <div class="d-flex justify-content-between align-items-center">
+              <small class="text-muted">Actualizado: ${v.updated_at ? new Date(v.updated_at).toLocaleString() : '-'}</small>
+              <a href="${url}" target="_blank" class="btn btn-outline-primary btn-sm">
+                <i class="fa-solid fa-play me-1"></i> Ver
+              </a>
+            </div>
+          </div>
+        </div>`;
+      grid.appendChild(col);
+    });
+  }catch{
+    grid.innerHTML = '<div class="col-12 text-danger">Error de red.</div>';
+  }
+}
+
+load();
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
