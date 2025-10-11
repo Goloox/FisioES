@@ -11,23 +11,31 @@ export const handler = async (event) => {
   try { claims = jwt.verify(auth.slice(7), process.env.JWT_SECRET); }
   catch { return { statusCode: 401, body: "Unauthorized" }; }
 
-  const usuario_id = Number(claims.id || claims.user_id || claims.sub || claims.usuario_id);
-  if (!usuario_id) return { statusCode: 400, body: "usuario no válido" };
+  const me = Number(claims.id ?? claims.user_id ?? claims.sub);
+  if (!me) return { statusCode: 401, body: "Unauthorized" };
 
-  const client = new Client({ connectionString: process.env.DATABASE_URL, ssl:{rejectUnauthorized:false} });
+  const client = new Client({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized:false } });
   await client.connect();
   try {
-    // Ajusta los nombres de tabla/campos a tu esquema real
-    const r = await client.query(
-      `SELECT va.id_asignacion, va.id_video, va.observacion, va.updated_at,
-              v.titulo, v.objetivo
-         FROM fisio.video_asignado va
-         JOIN fisio.video v ON v.id_video = va.id_video
-        WHERE va.id_usuario = $1
-        ORDER BY va.updated_at DESC`,
-      [usuario_id]
-    );
-
+    // IMPORTANTE: en tu BD la tabla es fisio.video_asignacion
+    // Ajusta la PK de video según tu esquema: v.id (común) o v.id_video.
+    const sql = `
+      SELECT
+        va.id,
+        va.id_usuario,
+        va.id_video,
+        va.observacion,
+        va.updated_at,
+        v.id      AS id_video,              -- si tu PK es id_video, cambia a: v.id_video AS id_video
+        v.titulo,
+        v.objetivo
+      FROM fisio.video_asignacion va
+      JOIN fisio.video v
+        ON v.id = va.id_video               -- si tu PK es id_video, cambia a: v.id_video = va.id_video
+      WHERE va.id_usuario = $1
+      ORDER BY va.updated_at DESC NULLS LAST, v.titulo ASC
+    `;
+    const r = await client.query(sql, [me]);
     return {
       statusCode: 200,
       headers: { "Content-Type":"application/json" },
