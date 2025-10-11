@@ -1,87 +1,88 @@
 // netlify/functions/video_stream.js
 import { Client } from "pg";
-import jwt from "jsonwebtoken";
+import { requireUserClaims, readToken } from "./_auth.js";
 
-function getToken(event){
-  const h = event.headers || {};
-  const q = event.queryStringParameters || {};
-  const ah = h.authorization || h.Authorization || "";
-  if (ah?.startsWith?.("Bearer ")) return ah.slice(7);
-  return q.jwt || null;
-}
-
-function sniff(buf){
-  if (!buf || buf.length < 4) return "application/octet-stream";
-  // MP4
-  if (buf[4]===0x66 && buf[5]===0x74 && buf[6]===0x79 && buf[7]===0x70) return "video/mp4";
-  // WebM
-  if (buf[0]===0x1A && buf[1]===0x45 && buf[2]===0xDF && buf[3]===0xA3) return "video/webm";
-  // OGG
-  if (buf[0]===0x4F && buf[1]===0x67 && buf[2]===0x67 && buf[3]===0x53) return "video/ogg";
-  return "application/octet-stream";
-}
-
-function toBuffer(raw){
-  if (Buffer.isBuffer(raw)) return raw;
-  if (raw?.type==="Buffer" && Array.isArray(raw?.data)) return Buffer.from(raw.data);
-  if (typeof raw === "string" && raw.startsWith("\\x")) return Buffer.from(raw.slice(2), "hex");
-  if (typeof raw === "string") return Buffer.from(raw, "binary");
-  return Buffer.from(raw);
-}
-
+/*
+ Sirve el binario desde fisio.video_archivo (si existe) o,
+ si no hay archivo, redirige a v.video_url (si empieza con http/https).
+ Requiere estar logueado: acepta Authorization: Bearer ... o ?jwt=...
+*/
 export const handler = async (event) => {
-  const token = getToken(event);
-  if(!token) return { statusCode: 401, body: "Unauthorized" };
-  let claims; try{ claims = jwt.verify(token, process.env.JWT_SECRET); } catch { return { statusCode: 401, body: "Unauthorized" }; }
+  const auth = requireUserClaims(event);
+  if (!auth.ok) return { statusCode: auth.statusCode, body: auth.error };
 
-  const id = Number((event.queryStringParameters||{}).id || 0);
-  if (!id) return { statusCode: 400, body: "id requerido" };
+  const qs = event.queryStringParameters || {};
+  const id_video = Number(qs.id || qs.id_video || 0);
+  if (!id_video) return { statusCode: 400, body: "id requerido" };
 
   const client = new Client({
     connectionString: process.env.DATABASE_URL,
-    ssl:{rejectUnauthorized:false}
+    ssl: { rejectUnauthorized: false }
   });
   await client.connect();
-
   try {
-    // 1) ¿Tiene URL pública/relativa?
-    const v = await client.query(
-      `SELECT id_video, video_url FROM fisio.video WHERE id_video = $1 LIMIT 1`,
-      [id]
-    );
-    if (v.rowCount) {
-      const url = v.rows[0].video_url;
-      if (url && url.trim()) {
-        // Sirve por redirección (funciona con http(s) o rutas relativas tipo /.netlify/functions/..)
-        return { statusCode: 302, headers: { Location: url } };
-      }
-    }
-
-    // 2) Si no hay URL, intenta archivo binario
-    const r = await client.query(
-      `SELECT archivo, mime_type, file_name
+    // 1) ¿Hay archivo subido para el video?
+    const r1 = await client.query(
+      `SELECT archivo, content_type
          FROM fisio.video_archivo
         WHERE id_video = $1
-        ORDER BY updated_at DESC NULLS LAST, created_at DESC NULLS LAST
+        ORDER BY created_at DESC
         LIMIT 1`,
-      [id]
+      [id_video]
     );
-    if (!r.rowCount) return { statusCode: 404, body: "No hay archivo para este video" };
 
-    const row = r.rows[0];
-    const buf = toBuffer(row.archivo);
-    const ct  = row.mime_type || sniff(buf);
+    if (r1.rowCount) {
+      // normalizamos buffer
+      const raw = r1.rows[0].archivo;
+      const buf = Buffer.isBuffer(raw)
+        ? raw
+        : (raw?.type === "Buffer" && Array.isArray(raw?.data))
+          ? Buffer.from(raw.data)
+          : typeof raw === "string" && raw.startsWith("\\x")
+            ? Buffer.from(raw.slice(2), "hex")
+            : Buffer.from(raw);
 
-    return {
-      statusCode: 200,
-      headers: {
-        "Content-Type": ct,
-        "Content-Disposition": `inline; filename="${(row.file_name||'video')}"`,
-        "Cache-Control": "private, max-age=300"
-      },
-      isBase64Encoded: true,
-      body: buf.toString("base64")
-    };
+      const ct = r1.rows[0].content_type || "application/octet-stream";
+      return {
+        statusCode: 200,
+        headers: {
+          "Content-Type": ct,
+          "Cache-Control": "private, max-age=300",
+          // evita downloads forzados: que el navegador lo intente reproducir
+          "Content-Disposition":"inline"
+        },
+        isBase64Encoded: true,
+        body: buf.toString("base64")
+      };
+    }
+
+    // 2) Si no hay archivo, usamos la URL del video
+    const r2 = await client.query(
+      `SELECT video_url FROM fisio.video WHERE id_video = $1 LIMIT 1`,
+      [id_video]
+    );
+    if (!r2.rowCount) return { statusCode: 404, body: "No existe el video" };
+
+    const url = String(r2.rows[0].video_url || "").trim();
+    if (/^https?:\/\//i.test(url)) {
+      // redirigimos al recurso externo
+      return {
+        statusCode: 302,
+        headers: { Location: url }
+      };
+    }
+
+    // Si la URL almacenada es un path relativo a tu app, añade el JWT para autorización
+    if (url) {
+      const token = readToken(event);
+      const sep = url.includes("?") ? "&" : "?";
+      return {
+        statusCode: 302,
+        headers: { Location: `${url}${sep}jwt=${encodeURIComponent(token||"")}` }
+      };
+    }
+
+    return { statusCode: 404, body: "Video sin archivo ni URL" };
   } catch (e) {
     return { statusCode: 500, body: "Error: " + e.message };
   } finally {
