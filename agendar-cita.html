@@ -40,7 +40,8 @@
             </div>
             <div class="col-12 col-md-6">
               <label class="form-label">Fecha y hora <span class="text-danger">*</span></label>
-              <input id="fecha" type="datetime-local" class="form-control" required>
+             <input id="fecha" type="datetime-local" class="form-control" required step="3600">
+
             </div>
             <div class="col-12">
               <label class="form-label">Descripción</label>
@@ -78,12 +79,24 @@ if (Number(user.rol_id) === 1) location.href = 'Default.html';
 
 document.getElementById('logoutBtn').onclick = ()=>{ localStorage.clear(); location.href='login.html'; };
 
-// Helper: ISO a partir de datetime-local (asume zona local)
-function toISO(dtLocal) {
-  const d = new Date(dtLocal);
-  if (isNaN(d)) return null;
-  return new Date(d.getTime() - d.getTimezoneOffset()*60000).toISOString(); // normaliza a UTC
+// Normaliza el valor de datetime-local a "YYYY-MM-DDTHH:00:00" (sin Z)
+function normalizeFullHour(dtLocalValue){
+  // dtLocalValue viene como "YYYY-MM-DDTHH:MM"
+  if(!dtLocalValue) return null;
+  const [date, hm] = dtLocalValue.split('T');
+  if(!date || !hm) return null;
+  const [h, m='00'] = hm.split(':');
+  // Siempre forzamos MM=00 y segundos = 00
+  const hh = String(Math.max(0, Math.min(23, parseInt(h||'0',10)))).padStart(2,'0');
+  return `${date}T${hh}:00:00`;
 }
+
+// Al cambiar, “snap” a :00
+const fechaInput = document.getElementById('fecha');
+fechaInput.addEventListener('change', ()=>{
+  const norm = normalizeFullHour(fechaInput.value);
+  if(norm){ fechaInput.value = norm.slice(0,16); } // recorta a "YYYY-MM-DDTHH:MM"
+});
 
 const frm = document.getElementById('frmCita');
 frm.addEventListener('submit', async (e)=>{
@@ -94,15 +107,17 @@ frm.addEventListener('submit', async (e)=>{
   const msg = document.getElementById('msg');
 
   if(!titulo || !fechaLocal){ msg.textContent = 'Completa título y fecha/hora.'; return; }
-  const fechaISO = toISO(fechaLocal);
-  if(!fechaISO){ msg.textContent = 'Fecha/hora inválida.'; return; }
+
+  // Fuerza minutos 00 y NO convierte a UTC (no usar toISOString)
+  const fechaStr = normalizeFullHour(fechaLocal);
+  if(!fechaStr){ msg.textContent = 'Fecha/hora inválida.'; return; }
 
   msg.textContent = 'Enviando...';
   try{
     const r = await fetch('/.netlify/functions/cita_create', {
       method:'POST',
       headers:{ 'Authorization':'Bearer '+token, 'Content-Type':'application/json' },
-      body: JSON.stringify({ titulo, fecha:fechaISO, descripcion })
+      body: JSON.stringify({ titulo, fecha: fechaStr, descripcion })
     });
     const t = await r.text(); let d=null; try{ d=JSON.parse(t);}catch{}
     if(!r.ok){ msg.textContent = (d?.error||t||'Error al agendar'); return; }
