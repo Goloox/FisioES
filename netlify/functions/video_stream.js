@@ -1,77 +1,123 @@
+// netlify/functions/video_stream.js
 import { Client } from "pg";
-import { requireUserClaims, readToken } from "./_auth.js";
+import jwt from "jsonwebtoken";
 
-function sniff(buf){
-  if(!buf || buf.length<4) return "application/octet-stream";
-  // mp4
-  if (buf[0]===0x00 && buf[1]===0x00 && buf[2]===0x00) return "video/mp4";
-  return "application/octet-stream";
+function getToken(event) {
+  const h = event.headers || {};
+  const q = event.queryStringParameters || {};
+  const ah = h.authorization || h.Authorization || "";
+  if (ah?.startsWith?.("Bearer ")) return ah.slice(7);
+  return q.jwt || null;
 }
 
-async function pickFile(client, id_video){
-  const sqls = [
-    `SELECT archivo, content_type FROM fisio.video_archivos WHERE id_video=$1 ORDER BY created_at DESC LIMIT 1`,
-    `SELECT archivo, content_type FROM fisio.video_archivo  WHERE id_video=$1 ORDER BY created_at DESC LIMIT 1`,
-  ];
-  for(const s of sqls){
-    try{
-      const r = await client.query(s, [id_video]);
-      if(r.rowCount) return r.rows[0];
-    }catch(e){
-      if(!/relation .* does not exist/i.test(e.message)) throw e;
-    }
-  }
-  return null;
+function bufferFromPg(raw) {
+  if (!raw) return null;
+  if (Buffer.isBuffer(raw)) return raw;
+  if (raw?.type === "Buffer" && Array.isArray(raw?.data)) return Buffer.from(raw.data);
+  if (typeof raw === "string" && raw.startsWith("\\x")) return Buffer.from(raw.slice(2), "hex");
+  if (typeof raw === "string") return Buffer.from(raw, "base64");
+  try { return Buffer.from(raw); } catch { return null; }
 }
 
 export const handler = async (event) => {
-  const auth = requireUserClaims(event);
-  if(!auth.ok) return { statusCode:auth.statusCode, body:auth.error };
+  // --- auth ---
+  const token = getToken(event);
+  if (!token) return { statusCode: 401, body: "Unauthorized" };
+  let claims;
+  try { claims = jwt.verify(token, process.env.JWT_SECRET); }
+  catch { return { statusCode: 401, body: "Unauthorized" }; }
 
-  const id_video = Number((event.queryStringParameters||{}).id || 0);
-  if(!id_video) return { statusCode:400, body:"id requerido" };
+  const role = Number(claims.rol_id ?? claims.role_id ?? claims.role ?? claims.rol);
+  const userId = Number(claims.id ?? claims.user_id ?? claims.usuario_id ?? claims.sub);
 
-  const client = new Client({ connectionString:process.env.DATABASE_URL, ssl:{rejectUnauthorized:false} });
+  const idVideo = Number((event.queryStringParameters || {}).id || 0);
+  if (!idVideo) return { statusCode: 400, body: "id requerido" };
+
+  const client = new Client({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
   await client.connect();
-  try{
-    // 1) si hay archivo binario, lo servimos
-    const f = await pickFile(client, id_video);
-    if (f){
-      const raw = f.archivo;
-      const buf = Buffer.isBuffer(raw) ? raw
-        : (raw?.type==="Buffer" && Array.isArray(raw?.data)) ? Buffer.from(raw.data)
-        : (typeof raw==="string" && raw.startsWith("\\x")) ? Buffer.from(raw.slice(2), "hex")
-        : Buffer.from(raw);
-      const ct = f.content_type || sniff(buf);
+
+  try {
+    // --- Permisos: admin o usuario con asignación ---
+    if (role !== 1) {
+      const check = await client.query(
+        `SELECT 1 FROM fisio.video_asignacion WHERE id_usuario=$1 AND id_video=$2 LIMIT 1`,
+        [userId, idVideo]
+      );
+      if (check.rowCount === 0) return { statusCode: 403, body: "Forbidden" };
+    }
+
+    // --- Intentar leer binario desde video_archivo ---
+    const fileRes = await client.query(
+      `SELECT archivo, COALESCE(content_type,'video/mp4') AS content_type
+         FROM fisio.video_archivo
+        WHERE id_video=$1
+        LIMIT 1`,
+      [idVideo]
+    );
+
+    if (fileRes.rowCount > 0) {
+      const row = fileRes.rows[0];
+      const full = bufferFromPg(row.archivo);
+      if (!full) return { statusCode: 500, body: "Archivo inválido" };
+
+      const total = full.length;
+      const range = event.headers?.range;
+      const ct = row.content_type || "video/mp4";
+
+      // Soporte Range
+      if (range && /^bytes=/.test(range)) {
+        const [startStr, endStr] = range.replace(/bytes=/, "").split("-");
+        let start = parseInt(startStr, 10);
+        let end = endStr ? parseInt(endStr, 10) : total - 1;
+        if (isNaN(start) || start < 0) start = 0;
+        if (isNaN(end) || end >= total) end = total - 1;
+        if (start > end) start = 0;
+
+        const chunk = full.subarray(start, end + 1);
+        return {
+          statusCode: 206,
+          isBase64Encoded: true,
+          headers: {
+            "Content-Type": ct,
+            "Content-Length": String(chunk.length),
+            "Accept-Ranges": "bytes",
+            "Content-Range": `bytes ${start}-${end}/${total}`,
+            "Cache-Control": "private, max-age=60"
+          },
+          body: chunk.toString("base64")
+        };
+      }
+
+      // Respuesta completa
       return {
-        statusCode:200,
-        headers:{ "Content-Type":ct, "Cache-Control":"private, max-age=300", "Content-Disposition":"inline" },
-        isBase64Encoded:true,
-        body: buf.toString("base64")
+        statusCode: 200,
+        isBase64Encoded: true,
+        headers: {
+          "Content-Type": ct,
+          "Content-Length": String(total),
+          "Accept-Ranges": "bytes",
+          "Cache-Control": "private, max-age=60"
+        },
+        body: full.toString("base64")
       };
     }
 
-    // 2) si hay URL, redirigimos (evitar loop hacia esta misma función)
-    const r = await client.query(`SELECT video_url FROM fisio.video WHERE id_video=$1 LIMIT 1`, [id_video]);
-    if(!r.rowCount) return { statusCode:404, body:"No existe el video" };
-
-    const url = String(r.rows[0].video_url || "").trim();
-    if(!url) return { statusCode:404, body:"Video sin archivo ni URL" };
-
-    const selfFn = /^\/\.netlify\/functions\/video_stream/i;
-    if (selfFn.test(url)) {
-      // evitar redirección infinita
-      return { statusCode:404, body:"El video_url apunta a video_stream. Sube un archivo o usa una URL externa." };
+    // --- Si no hay binario, intentar URL externa (redirigir) ---
+    const vRes = await client.query(`SELECT video_url FROM fisio.video WHERE id_video=$1 LIMIT 1`, [idVideo]);
+    if (vRes.rowCount) {
+      const url = vRes.rows[0].video_url || "";
+      if (/^https?:\/\//i.test(url)) {
+        return {
+          statusCode: 302,
+          headers: { Location: url }
+        };
+      }
     }
 
-    if (/^https?:\/\//i.test(url)) {
-      return { statusCode:302, headers:{ Location: url } };
-    }
-
-    const token = readToken(event) || "";
-    const sep = url.includes("?") ? "&" : "?";
-    return { statusCode:302, headers:{ Location: `${url}${sep}jwt=${encodeURIComponent(token)}` } };
-  }catch(e){
-    return { statusCode:500, body:"Error: "+e.message };
-  }finally{ try{ await client.end(); }catch{} }
+    return { statusCode: 404, body: "Video no disponible" };
+  } catch (e) {
+    return { statusCode: 500, body: "Error: " + e.message };
+  } finally {
+    try { await client.end(); } catch {}
+  }
 };
