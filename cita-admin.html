@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Editar Cita • FISIOES</title>
+
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" rel="stylesheet">
+<link rel="stylesheet" href="CSS/style.css">
+<link rel="stylesheet" href="CSS/navbar.css">
+<link rel="icon" href="Img/logo.jpg" type="image/jpg">
+<style>
+  .thumb{width:110px;height:85px;object-fit:cover;border-radius:6px;border:1px solid rgba(0,0,0,.08);background:#f2f2f2}
+</style>
+<script>
+(function(){
+  const t=localStorage.getItem('token'), u=localStorage.getItem('user');
+  if(!t||!u){ location.href='login.html'; return; }
+  try{ if(JSON.parse(u).rol_id!==1) location.href='homecliente.html'; }catch{ localStorage.clear(); location.href='login.html';}
+})();
+</script>
+</head>
+<body class="bg-light">
+
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark sticky-top">
+  <div class="container">
+    <a class="navbar-brand d-flex align-items-center gap-2" href="citas-admin.html">
+      <img src="Img/logo.jpg" alt="FISIOES" style="height:40px;width:40px;border-radius:6px;object-fit:cover;">
+      <span class="fw-semibold">FISIOES</span>
+    </a>
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#adminNavbar">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="adminNavbar">
+      <ul class="navbar-nav ms-auto align-items-lg-center">
+        <li class="nav-item me-lg-2"><a href="citas-admin.html" class="btn btn-primary btn-sm w-100 my-1 my-lg-0"><i class="fa-solid fa-calendar-check me-1"></i> Citas Admin</a></li>
+        <li class="nav-item me-lg-2"><a href="admin-usuarios.html" class="btn btn-outline-primary btn-sm w-100 my-1 my-lg-0"><i class="fa-solid fa-user-gear me-1"></i> Usuarios</a></li>
+        <li class="nav-item me-lg-2"><a href="admin-calendario.html" class="btn btn-outline-light btn-sm w-100 my-1 my-lg-0"><i class="fa-solid fa-calendar-days me-1"></i> Calendario</a></li>
+        <li class="nav-item ms-lg-2"><button id="btnLogout" class="btn btn-danger btn-sm w-100 my-1 my-lg-0"><i class="fa-solid fa-right-from-bracket me-1"></i> Salir</button></li>
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<header class="py-5 text-white" style="background-image:url('Img/fisioes.jpg'); background-size:cover; background-position:center;">
+  <div class="container">
+    <h1 class="h3 mb-0"><i class="fa-solid fa-pen-to-square me-2"></i>Editar cita</h1>
+  </div>
+</header>
+
+<main class="container py-4">
+  <div id="alertWrap"></div>
+
+  <div class="row g-4">
+    <div class="col-12 col-lg-7">
+      <div class="card border-0 shadow-sm rounded-4">
+        <div class="card-body">
+          <form id="frm">
+            <div class="mb-3">
+              <label class="form-label">Título</label>
+              <input id="titulo" class="form-control" maxlength="150" required>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label">Descripción / Notas</label>
+              <textarea id="descripcion" class="form-control" rows="5"></textarea>
+            </div>
+
+            <div class="row g-3">
+              <div class="col-12 col-md-6">
+                <label class="form-label">Fecha</label>
+                <input id="fecha" type="datetime-local" class="form-control" required>
+                <div class="form-text">La hora se guarda a HH:00. Si eliges otros minutos, se ajustará automáticamente.</div>
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label">Estado</label>
+                <select id="estado" class="form-select">
+                  <option value="1">1 - Aceptado</option>
+                  <option value="3">3 - En espera</option>
+                  <option value="4">4 - Pospuesto</option>
+                  <option value="2">2 - Cancelado</option>
+                  <option value="5">5 - Finalizada</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="mt-4 d-flex gap-2">
+              <button class="btn btn-primary" type="submit"><i class="fa-solid fa-floppy-disk me-1"></i> Guardar</button>
+              <a class="btn btn-outline-secondary" href="citas-admin.html"><i class="fa-solid fa-arrow-left"></i> Volver</a>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-12 col-lg-5">
+      <div class="card border-0 shadow-sm rounded-4 mb-4">
+        <div class="card-body">
+          <h5 class="h6 mb-3">Paciente</h5>
+          <div id="pacienteBox" class="small text-muted">—</div>
+        </div>
+      </div>
+
+      <div class="card border-0 shadow-sm rounded-4">
+        <div class="card-body">
+          <h5 class="h6 mb-3">Imágenes</h5>
+          <div class="mb-3">
+            <input id="file" type="file" accept="image/*" class="form-control">
+            <button id="btnUpload" class="btn btn-outline-primary btn-sm mt-2"><i class="fa-solid fa-upload me-1"></i> Subir</button>
+          </div>
+          <div id="galeria" class="d-flex flex-wrap gap-2"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+// Helpers fecha
+function pad(n){ return n<10?'0'+n:n; }
+function parseSqlTimestampAsLocal(s) {
+  if (!s || typeof s !== 'string') return null;
+  const clean = s.replace('Z','').replace(' ', 'T');
+  const m = clean.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?/);
+  if (!m) return null;
+  const [_, yy, MM, dd, hh, mm, ss] = m;
+  return new Date(Number(yy), Number(MM)-1, Number(dd), Number(hh), Number(mm), Number(ss||0));
+}
+function toDatetimeLocalValue(d){ // para input[type=datetime-local]
+  return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+'T'+pad(d.getHours())+':'+pad(d.getMinutes());
+}
+function formatLocal(s){ const d=parseSqlTimestampAsLocal(s); return d?d.toLocaleString():s; }
+</script>
+
+<script>
+(async function(){
+  const token = localStorage.getItem('token');
+  const params = new URLSearchParams(location.search);
+  const id_cita = Number(params.get('id')||0);
+  if(!id_cita){ location.href='citas-admin.html'; return; }
+
+  const alertWrap = document.getElementById('alertWrap');
+  function showAlert(msg, type='success'){
+    alertWrap.innerHTML = `<div class="alert alert-${type} alert-dismissible fade show"><div>${msg}</div><button class="btn-close" data-bs-dismiss="alert"></button></div>`;
+  }
+  document.getElementById('btnLogout').onclick = ()=>{ localStorage.clear(); location.href='login.html'; };
+
+  async function readJsonOrText(res){
+    const t = await res.text(); let d=null; try{ d=JSON.parse(t); }catch{}
+    return { ok:res.ok, data:d, text:t };
+  }
+
+  // Carga de la cita
+  async function load(){
+    const r = await fetch('/.netlify/functions/cita_get?id='+id_cita, { headers:{ Authorization:'Bearer '+token }});
+    const {ok, data, text} = await readJsonOrText(r);
+    if(!ok){ showAlert(data?.error||text||'Error cargando la cita', 'danger'); return; }
+
+    const c = data.row;
+    document.getElementById('titulo').value = c.titulo || '';
+    document.getElementById('descripcion').value = c.descripcion || '';
+    document.getElementById('estado').value = String(c.estado||1);
+
+    // fecha -> datetime-local, forzamos minuto 00 (si no viene)
+    const d = parseSqlTimestampAsLocal(c.fecha);
+    if(d){
+      d.setMinutes(0,0,0);
+      document.getElementById('fecha').value = toDatetimeLocalValue(d);
+    }
+
+    const pBox = document.getElementById('pacienteBox');
+    pBox.innerHTML = `
+      <div><b>Nombre:</b> ${c.nombre_completo}</div>
+      <div><b>Correo:</b> <code>${c.correo}</code></div>
+      <div><b>Programada:</b> ${formatLocal(c.fecha)}</div>
+      <div><b>ID cita:</b> ${c.id_cita}</div>`;
+
+    const gal = document.getElementById('galeria');
+    gal.innerHTML = '';
+    (data.images||[]).forEach(img=>{
+      const src = '/.netlify/functions/cita_image?id='+img.id+'&jwt='+encodeURIComponent(token);
+      const el = document.createElement('div');
+      el.className = 'd-flex flex-column align-items-center';
+      el.innerHTML = `
+        <img class="thumb" src="${src}" alt="">
+        <button class="btn btn-sm btn-outline-danger mt-1 del-img" data-id="${img.id}">
+          <i class="fa-solid fa-trash"></i>
+        </button>`;
+      gal.appendChild(el);
+    });
+
+    gal.querySelectorAll('.del-img').forEach(btn=>{
+      btn.onclick = async ()=>{
+        const id = Number(btn.dataset.id);
+        if(!confirm('Eliminar imagen?')) return;
+        const rr = await fetch('/.netlify/functions/cita_delete_image', {
+          method:'POST',
+          headers:{ Authorization:'Bearer '+token, 'Content-Type':'application/json' },
+          body: JSON.stringify({ id })
+        });
+        const {ok, data, text} = await readJsonOrText(rr);
+        if(!ok){ showAlert(data?.error||text||'No se pudo borrar', 'danger'); return; }
+        showAlert('Imagen eliminada');
+        load();
+      };
+    });
+  }
+
+  // Guardar
+  document.getElementById('frm').addEventListener('submit', async (ev)=>{
+    ev.preventDefault();
+    const titulo = document.getElementById('titulo').value.trim();
+    const descripcion = document.getElementById('descripcion').value.trim();
+    const estado = Number(document.getElementById('estado').value);
+    const v = document.getElementById('fecha').value; // yyyy-MM-ddTHH:mm
+    if(!v){ showAlert('Fecha requerida','danger'); return; }
+    const d = new Date(v);
+    if(isNaN(d.getTime())){ showAlert('Fecha inválida','danger'); return; }
+    // Forzar minuto 00
+    if(d.getMinutes() !== 0){
+      d.setMinutes(0,0,0);
+      showAlert('Minutos ajustados a :00 para mantener horas completas.', 'warning');
+    }
+    const fecha = d.getFullYear()+'-'+(d.getMonth()+1).toString().padStart(2,'0')+'-'+d.getDate().toString().padStart(2,'0')+' '+d.getHours().toString().padStart(2,'0')+':00:00';
+
+    const r = await fetch('/.netlify/functions/cita_update', {
+      method:'POST',
+      headers:{ Authorization:'Bearer '+token, 'Content-Type':'application/json' },
+      body: JSON.stringify({ id_cita, titulo, descripcion, estado, fecha })
+    });
+    const {ok, data, text} = await readJsonOrText(r);
+    if(!ok){ showAlert(data?.error||text||'No se pudo guardar','danger'); return; }
+    showAlert('Cambios guardados');
+  });
+
+  // Upload imagen
+  document.getElementById('btnUpload').addEventListener('click', async (e)=>{
+    e.preventDefault();
+    const file = document.getElementById('file').files[0];
+    if(!file){ showAlert('Selecciona una imagen','danger'); return; }
+    const fd = new FormData();
+    fd.append('id_cita', String(id_cita));
+    fd.append('file', file);
+    const r = await fetch('/.netlify/functions/cita_upload_image', {
+      method:'POST',
+      headers:{ Authorization:'Bearer '+token },
+      body: fd
+    });
+    const {ok, data, text} = await readJsonOrText(r);
+    if(!ok){ showAlert(data?.error||text||'No se pudo subir','danger'); return; }
+    document.getElementById('file').value = '';
+    showAlert('Imagen subida');
+    load();
+  });
+
+  load();
+})();
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
