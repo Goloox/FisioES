@@ -15,19 +15,32 @@ export const handler = async (event) => {
   catch { return { statusCode: 401, body: "Unauthorized" }; }
 
   const rol = Number(claims.rol_id ?? claims.role_id ?? claims.role ?? claims.rol);
-  if (rol !== 1) return { statusCode: 403, body: "Solo ADMIN" };
+  const usuario_id = Number(claims.id || claims.user_id || claims.sub || claims.usuario_id);
 
   let body;
   try { body = JSON.parse(event.body || "{}"); } catch { body = {}; }
 
   const id_cita = Number(body.id_cita);
-  const estado = Number(body.estado); // 1 aceptado, 2 cancelado, 3 espera, 4 pospuesto, 5 finalizada
+  const estado = Number(body.estado); // 1..5
   if (!id_cita || ![1,2,3,4,5].includes(estado))
     return { statusCode: 400, body: "Parámetros inválidos" };
 
   const client = new Client({ connectionString: process.env.DATABASE_URL, ssl:{rejectUnauthorized:false} });
   await client.connect();
   try {
+    // Si es cliente (no admin), solo puede modificar sus citas y a estados permitidos
+    if (rol !== 1) {
+      // permitir al cliente SOLO 2 (cancelar) o 4 (posponer)
+      if (![2,4].includes(estado)) {
+        return { statusCode: 403, body: "Acción no permitida para cliente" };
+      }
+      const owner = await client.query(
+        `SELECT 1 FROM fisio.cita WHERE id_cita=$1 AND usuario_id=$2 LIMIT 1`,
+        [id_cita, usuario_id]
+      );
+      if (!owner.rowCount) return { statusCode: 403, body: "No puedes modificar esta cita" };
+    }
+
     const upd = await client.query(
       `UPDATE fisio.cita
           SET estado = $2,
