@@ -1,7 +1,8 @@
-// netlify/functions/video_stream.js
+// netlify/functions/videos_list_me.js
 import { Client } from "pg";
 import jwt from "jsonwebtoken";
 
+// Obtener token desde Authorization: Bearer ... o ?jwt=...
 function getToken(event){
   const h = event.headers || {};
   const q = event.queryStringParameters || {};
@@ -10,77 +11,69 @@ function getToken(event){
   return q.jwt || null;
 }
 
-function sniff(buf){
-  if (!buf || buf.length < 4) return "application/octet-stream";
-  // MP4
-  if (buf[4]===0x66 && buf[5]===0x74 && buf[6]===0x79 && buf[7]===0x70) return "video/mp4";
-  // WebM
-  if (buf[0]===0x1A && buf[1]===0x45 && buf[2]===0xDF && buf[3]===0xA3) return "video/webm";
-  // OGG
-  if (buf[0]===0x4F && buf[1]===0x67 && buf[2]===0x67 && buf[3]===0x53) return "video/ogg";
-  return "application/octet-stream";
-}
+// Resolver id de usuario desde los claims; si no hay, intentar por correo
+async function resolveUserId(client, claims){
+  // 1) Campos típicos de id en el JWT
+  const direct =
+    claims.id ?? claims.user_id ?? claims.sub ?? claims.uid ??
+    claims.usuario_id ?? claims.id_usuario ?? null;
+  if (direct) return Number(direct);
 
-function toBuffer(raw){
-  if (Buffer.isBuffer(raw)) return raw;
-  if (raw?.type==="Buffer" && Array.isArray(raw?.data)) return Buffer.from(raw.data);
-  if (typeof raw === "string" && raw.startsWith("\\x")) return Buffer.from(raw.slice(2), "hex");
-  if (typeof raw === "string") return Buffer.from(raw, "binary");
-  return Buffer.from(raw);
+  // 2) Buscar por correo en BD (si viene en el token)
+  const email = claims.email ?? claims.correo ?? claims.mail ?? null;
+  if (email) {
+    const r = await client.query(
+      `SELECT id FROM fisio.usuario WHERE LOWER(correo)=LOWER($1) LIMIT 1`,
+      [String(email)]
+    );
+    if (r.rowCount) return Number(r.rows[0].id);
+  }
+
+  // 3) No se pudo resolver
+  return null;
 }
 
 export const handler = async (event) => {
   const token = getToken(event);
-  if(!token) return { statusCode: 401, body: "Unauthorized" };
-  let claims; try{ claims = jwt.verify(token, process.env.JWT_SECRET); } catch { return { statusCode: 401, body: "Unauthorized" }; }
+  if (!token) return { statusCode: 401, body: "Unauthorized" };
 
-  const id = Number((event.queryStringParameters||{}).id || 0);
-  if (!id) return { statusCode: 400, body: "id requerido" };
+  let claims;
+  try { claims = jwt.verify(token, process.env.JWT_SECRET); }
+  catch { return { statusCode: 401, body: "Unauthorized" }; }
 
   const client = new Client({
     connectionString: process.env.DATABASE_URL,
-    ssl:{rejectUnauthorized:false}
+    ssl: { rejectUnauthorized: false }
   });
   await client.connect();
 
   try {
-    // 1) ¿Tiene URL pública/relativa?
-    const v = await client.query(
-      `SELECT id_video, video_url FROM fisio.video WHERE id_video = $1 LIMIT 1`,
-      [id]
-    );
-    if (v.rowCount) {
-      const url = v.rows[0].video_url;
-      if (url && url.trim()) {
-        // Sirve por redirección (funciona con http(s) o rutas relativas tipo /.netlify/functions/..)
-        return { statusCode: 302, headers: { Location: url } };
-      }
-    }
+    const me = await resolveUserId(client, claims);
+    if (!me) return { statusCode: 401, body: "Unauthorized" };
 
-    // 2) Si no hay URL, intenta archivo binario
-    const r = await client.query(
-      `SELECT archivo, mime_type, file_name
-         FROM fisio.video_archivo
-        WHERE id_video = $1
-        ORDER BY updated_at DESC NULLS LAST, created_at DESC NULLS LAST
-        LIMIT 1`,
-      [id]
-    );
-    if (!r.rowCount) return { statusCode: 404, body: "No hay archivo para este video" };
-
-    const row = r.rows[0];
-    const buf = toBuffer(row.archivo);
-    const ct  = row.mime_type || sniff(buf);
+    // Traer asignaciones y metadatos del video
+    const sql = `
+      SELECT
+        va.id,
+        va.id_usuario,
+        va.id_video,
+        va.observacion,
+        va.updated_at,
+        v.id_video AS id_video,
+        v.titulo,
+        v.objetivo
+      FROM fisio.video_asignacion va
+      JOIN fisio.video v
+        ON v.id_video = va.id_video
+      WHERE va.id_usuario = $1
+      ORDER BY va.updated_at DESC NULLS LAST, v.titulo ASC
+    `;
+    const r = await client.query(sql, [me]);
 
     return {
       statusCode: 200,
-      headers: {
-        "Content-Type": ct,
-        "Content-Disposition": `inline; filename="${(row.file_name||'video')}"`,
-        "Cache-Control": "private, max-age=300"
-      },
-      isBase64Encoded: true,
-      body: buf.toString("base64")
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rows: r.rows })
     };
   } catch (e) {
     return { statusCode: 500, body: "Error: " + e.message };
