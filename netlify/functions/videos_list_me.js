@@ -1,40 +1,53 @@
+// netlify/functions/videos_list_me.js
 import { Client } from "pg";
-import { requireUserClaims } from "./_auth.js";
+import jwt from "jsonwebtoken";
 
-async function firstOk(client, sqls, params){
-  let last=null;
-  for(const s of sqls){
-    try{ return await client.query(s, params); }
-    catch(e){ if(!/relation .* does not exist/i.test(e.message)) throw e; last=e; }
-  }
-  throw last || new Error("No query worked");
+function getToken(event) {
+  const h = event.headers || {};
+  const q = event.queryStringParameters || {};
+  const ah = h.authorization || h.Authorization || "";
+  if (ah?.startsWith?.("Bearer ")) return ah.slice(7);
+  return q.jwt || null;
 }
 
 export const handler = async (event) => {
-  const auth = requireUserClaims(event);
-  if(!auth.ok) return { statusCode:auth.statusCode, body:auth.error };
-  const { user_id } = auth.claims;
+  const token = getToken(event);
+  if (!token) return { statusCode: 401, body: "Unauthorized" };
 
-  const client = new Client({ connectionString:process.env.DATABASE_URL, ssl:{rejectUnauthorized:false} });
+  let claims;
+  try { claims = jwt.verify(token, process.env.JWT_SECRET); }
+  catch { return { statusCode: 401, body: "Unauthorized" }; }
+
+  const userId = Number(claims.id ?? claims.user_id ?? claims.usuario_id ?? claims.sub);
+  if (!userId) return { statusCode: 401, body: "Unauthorized" };
+
+  const client = new Client({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
   await client.connect();
-  try{
-    const r = await firstOk(client, [
-      `SELECT va.id, va.id_video, va.id_usuario, va.observacion, va.created_at, va.updated_at,
-              v.titulo, v.objetivo
-         FROM fisio.video_asignacions va
-         JOIN fisio.video v ON v.id_video = va.id_video
-        WHERE va.id_usuario = $1
-        ORDER BY COALESCE(va.updated_at, va.created_at) DESC, va.id DESC`,
-      `SELECT va.id, va.id_video, va.id_usuario, va.observacion, va.created_at, va.updated_at,
-              v.titulo, v.objetivo
-         FROM fisio.video_asignacion va
-         JOIN fisio.video v ON v.id_video = va.id_video
-        WHERE va.id_usuario = $1
-        ORDER BY COALESCE(va.updated_at, va.created_at) DESC, va.id DESC`,
-    ], [user_id]);
+  try {
+    const sql = `
+      SELECT 
+        va.id                 AS id_asignacion,
+        va.id_video,
+        va.id_usuario,
+        va.observacion,
+        va.updated_at,
+        v.titulo,
+        v.objetivo
+      FROM fisio.video_asignacion va
+      JOIN fisio.video v ON v.id_video = va.id_video
+      WHERE va.id_usuario = $1
+      ORDER BY va.updated_at DESC, va.id DESC
+    `;
+    const r = await client.query(sql, [userId]);
 
-    return { statusCode:200, headers:{ "Content-Type":"application/json" }, body:JSON.stringify({ rows:r.rows }) };
-  }catch(e){
-    return { statusCode:500, body:"Error: "+e.message };
-  }finally{ try{ await client.end(); }catch{} }
+    return {
+      statusCode: 200,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rows: r.rows })
+    };
+  } catch (e) {
+    return { statusCode: 500, body: "Error: " + e.message };
+  } finally {
+    try { await client.end(); } catch {}
+  }
 };
