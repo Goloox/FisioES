@@ -9,6 +9,7 @@ function getToken(event){
   if (ah?.startsWith?.("Bearer ")) return ah.slice(7);
   return q.jwt || null;
 }
+
 function sniff(buf){
   if (!buf || buf.length < 4) return "application/octet-stream";
   // MP4
@@ -19,6 +20,7 @@ function sniff(buf){
   if (buf[0]===0x4F && buf[1]===0x67 && buf[2]===0x67 && buf[3]===0x53) return "video/ogg";
   return "application/octet-stream";
 }
+
 function toBuffer(raw){
   if (Buffer.isBuffer(raw)) return raw;
   if (raw?.type==="Buffer" && Array.isArray(raw?.data)) return Buffer.from(raw.data);
@@ -32,34 +34,38 @@ export const handler = async (event) => {
   if(!token) return { statusCode: 401, body: "Unauthorized" };
   let claims; try{ claims = jwt.verify(token, process.env.JWT_SECRET); } catch { return { statusCode: 401, body: "Unauthorized" }; }
 
-  // Cualquier usuario logueado puede reproducir sus videos; el control de pertenencia
-  // lo llevas en el frontend (solo lista los suyos). Si quieres reforzar aquí,
-  // puedes verificar que el video esté asignado a "claims.id" antes de servirlo.
-
   const id = Number((event.queryStringParameters||{}).id || 0);
   if (!id) return { statusCode: 400, body: "id requerido" };
 
-  const client = new Client({ connectionString: process.env.DATABASE_URL, ssl:{rejectUnauthorized:false} });
+  const client = new Client({
+    connectionString: process.env.DATABASE_URL,
+    ssl:{rejectUnauthorized:false}
+  });
   await client.connect();
+
   try {
-    // 1) ¿tiene URL pública?
-    const v = await client.query(`SELECT id, public_url FROM fisio.video WHERE id=$1 LIMIT 1`, [id]);
-    if (v.rowCount && v.rows[0].public_url) {
-      return {
-        statusCode: 302,
-        headers: { Location: v.rows[0].public_url }
-      };
+    // 1) ¿Tiene URL pública/relativa?
+    const v = await client.query(
+      `SELECT id_video, video_url FROM fisio.video WHERE id_video = $1 LIMIT 1`,
+      [id]
+    );
+    if (v.rowCount) {
+      const url = v.rows[0].video_url;
+      if (url && url.trim()) {
+        // Sirve por redirección (funciona con http(s) o rutas relativas tipo /.netlify/functions/..)
+        return { statusCode: 302, headers: { Location: url } };
+      }
     }
 
-    // 2) Buscar archivo binario
-    const r = await client.query(`
-      SELECT archivo, mime_type, file_name
-      FROM fisio.video_archivo
-      WHERE id_video=$1
-      ORDER BY updated_at DESC NULLS LAST, created_at DESC NULLS LAST
-      LIMIT 1
-    `, [id]);
-
+    // 2) Si no hay URL, intenta archivo binario
+    const r = await client.query(
+      `SELECT archivo, mime_type, file_name
+         FROM fisio.video_archivo
+        WHERE id_video = $1
+        ORDER BY updated_at DESC NULLS LAST, created_at DESC NULLS LAST
+        LIMIT 1`,
+      [id]
+    );
     if (!r.rowCount) return { statusCode: 404, body: "No hay archivo para este video" };
 
     const row = r.rows[0];
