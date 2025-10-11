@@ -12,6 +12,7 @@
 <link rel="icon" href="Img/logo.jpg" type="image/jpg">
 <style>
   .avatar{width:32px;height:32px;border-radius:50%;object-fit:cover;border:2px solid rgba(255,255,255,.6);background:#222}
+  .filter-chip{border-radius:999px}
 </style>
 <script>
 (function(){
@@ -26,7 +27,7 @@
 <!-- NAVBAR responsive -->
 <nav class="navbar navbar-expand-lg navbar-dark bg-dark sticky-top">
   <div class="container">
-    <a class="navbar-brand d-flex align-items-center gap-2" href="Default.html">
+    <a class="navbar-brand d-flex align-items-center gap-2" href="homeadmin.html">
       <img src="Img/logo.jpg" alt="FISIOES" style="height:40px;width:40px;border-radius:6px;object-fit:cover;">
       <span class="fw-semibold">FISIOES</span>
     </a>
@@ -41,7 +42,9 @@
         <li class="nav-item me-lg-2"><a href="citas-admin.html" class="btn btn-primary btn-sm w-100 my-1 my-lg-0"><i class="fa-solid fa-calendar-check me-1"></i> Citas Admin</a></li>
         <li class="nav-item me-lg-2"><a href="admin-calendario.html" class="btn btn-outline-light btn-sm w-100 my-1 my-lg-0"><i class="fa-solid fa-calendar-days me-1"></i> Calendario</a></li>
         <li class="nav-item me-lg-2"><a href="profile.html" class="btn btn-outline-secondary btn-sm w-100 my-1 my-lg-0"><i class="fa-solid fa-id-badge me-1"></i> Perfil</a></li>
-        <li class="nav-item d-flex align-items-center gap-2 ms-lg-3 my-2 my-lg-0"><img id="avatarImg" class="avatar" alt="Avatar"><span id="adminName" class="text-white-50 small d-none d-lg-inline"></span></li>
+        <li class="nav-item d-flex align-items-center gap-2 ms-lg-3 my-2 my-lg-0">
+          <img id="avatarImg" class="avatar" alt="Avatar"><span id="adminName" class="text-white-50 small d-none d-lg-inline"></span>
+        </li>
         <li class="nav-item ms-lg-2"><button id="btnLogout" class="btn btn-danger btn-sm w-100 my-1 my-lg-0"><i class="fa-solid fa-right-from-bracket me-1"></i> Salir</button></li>
       </ul>
     </div>
@@ -56,24 +59,68 @@
 </header>
 
 <main class="container py-4">
+
+  <!-- Filtros -->
   <div class="card border-0 shadow-sm rounded-4 mb-4">
     <div class="card-body">
-      <div class="d-flex flex-wrap align-items-end gap-2">
-        <div class="me-auto">
-          <span class="text-muted small">Mostrar solo Estado=Aceptado y fecha futura (automático)</span>
+      <div class="row g-3 align-items-end">
+        <div class="col-12 col-lg-3">
+          <label class="form-label small mb-1">Buscar (cliente/correo/título)</label>
+          <input id="q" class="form-control form-control-sm" placeholder="Ej: María, @gmail, rodilla">
         </div>
-        <div>
-          <label class="form-label small mb-1">Buscar</label>
-          <input id="q" class="form-control form-control-sm" placeholder="Nombre, correo o título">
-        </div>
-        <div>
-          <label class="form-label small mb-1">Pág.</label>
-          <select id="pageSize" class="form-select form-select-sm"><option>10</option><option>20</option><option>50</option></select>
-        </div>
-        <button id="btnBuscar" class="btn btn-sm btn-primary"><i class="fa-solid fa-magnifying-glass"></i></button>
-      </div>
 
-      <div class="table-responsive mt-3">
+        <div class="col-6 col-lg-2">
+          <label class="form-label small mb-1">Desde</label>
+          <input id="from" type="date" class="form-control form-control-sm">
+        </div>
+        <div class="col-6 col-lg-2">
+          <label class="form-label small mb-1">Hasta</label>
+          <input id="to" type="date" class="form-control form-control-sm">
+        </div>
+
+        <div class="col-12 col-lg-3">
+          <label class="form-label small mb-1 d-block">Estados</label>
+          <div class="d-flex flex-wrap gap-1">
+            <label class="btn btn-sm btn-outline-success filter-chip">
+              <input type="checkbox" class="form-check-input me-1 estado" value="1" checked> Aceptado
+            </label>
+            <label class="btn btn-sm btn-outline-danger filter-chip">
+              <input type="checkbox" class="form-check-input me-1 estado" value="2"> Cancelado
+            </label>
+            <label class="btn btn-sm btn-outline-warning filter-chip">
+              <input type="checkbox" class="form-check-input me-1 estado" value="3"> En espera
+            </label>
+            <label class="btn btn-sm btn-outline-secondary filter-chip">
+              <input type="checkbox" class="form-check-input me-1 estado" value="4"> Pospuesto
+            </label>
+            <label class="btn btn-sm btn-outline-primary filter-chip">
+              <input type="checkbox" class="form-check-input me-1 estado" value="5"> Finalizada
+            </label>
+          </div>
+          <div class="form-check mt-2">
+            <input id="onlyFuture" class="form-check-input" type="checkbox" checked>
+            <label for="onlyFuture" class="form-check-label small">Solo futuras</label>
+          </div>
+        </div>
+
+        <div class="col-6 col-lg-1">
+          <label class="form-label small mb-1">Pág.</label>
+          <select id="pageSize" class="form-select form-select-sm">
+            <option>10</option><option>20</option><option>50</option>
+          </select>
+        </div>
+
+        <div class="col-6 col-lg-1 d-grid">
+          <button id="btnBuscar" class="btn btn-sm btn-primary"><i class="fa-solid fa-magnifying-glass"></i></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tabla -->
+  <div class="card border-0 shadow-sm rounded-4 mb-4">
+    <div class="card-body">
+      <div class="table-responsive mt-1">
         <table class="table table-sm align-middle">
           <thead>
             <tr>
@@ -88,7 +135,6 @@
           <tbody id="tbody"><tr><td colspan="6" class="text-muted">Cargando…</td></tr></tbody>
         </table>
       </div>
-
       <div class="d-flex justify-content-between align-items-center">
         <div class="small text-muted" id="totalLbl">—</div>
         <div class="btn-group">
@@ -126,6 +172,11 @@ function statusBadge(e){
     default: return '<span class="badge text-bg-light text-dark">—</span>';
   }
 }
+function todayYMD(){
+  const d=new Date();
+  const p=n=>n<10?'0'+n:n;
+  return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate());
+}
 </script>
 
 <script>
@@ -143,10 +194,12 @@ function statusBadge(e){
   })();
   document.getElementById('btnLogout').onclick = ()=>{ localStorage.clear(); location.href='login.html'; };
 
-  async function readJsonOrText(res){
-    const t = await res.text(); let d=null; try{ d=JSON.parse(t); }catch{}
-    return { ok:res.ok, data:d, text:t };
-  }
+  // Defaults: Solo futuras + estado Aceptado
+  const elFrom = document.getElementById('from');
+  const elTo   = document.getElementById('to');
+  const onlyFuture = document.getElementById('onlyFuture');
+  elFrom.value = todayYMD(); // desde hoy
+  elTo.value   = '';         // sin límite superior
 
   const tbody = document.getElementById('tbody');
   const totalLbl = document.getElementById('totalLbl');
@@ -156,20 +209,37 @@ function statusBadge(e){
   const pageSize = document.getElementById('pageSize');
   const q        = document.getElementById('q');
   const btnBuscar= document.getElementById('btnBuscar');
+  const estadoChecks = [...document.querySelectorAll('.estado')];
 
   let page = 1;
 
+  function estadosSeleccionados(){
+    return estadoChecks.filter(c=>c.checked).map(c=>c.value).join(',');
+  }
+
   async function load(){
     tbody.innerHTML = '<tr><td colspan="6" class="text-muted">Cargando…</td></tr>';
-    const qs = new URLSearchParams({ page, pageSize:pageSize.value, q:q.value.trim() });
-    const r = await fetch('/.netlify/functions/cita_list_all_upcoming?'+qs, { headers:{ Authorization:'Bearer '+token }});
-    const {ok, data, text} = await readJsonOrText(r);
-    if(!ok){ tbody.innerHTML = `<tr><td colspan="6">${data?.error||text||'Error'}</td></tr>`; totalLbl.textContent='—'; return; }
+
+    // Si “solo futuras” está activo, forzamos from=today y limpiamos to
+    const from = onlyFuture.checked ? todayYMD() : (elFrom.value || '');
+    const to   = onlyFuture.checked ? ''         : (elTo.value   || '');
+
+    const qs = new URLSearchParams({
+      page, pageSize:pageSize.value,
+      q: q.value.trim(),
+      estados: estadosSeleccionados(), // "1,3,5" etc
+      from, to,
+      only_future: onlyFuture.checked ? '1' : '0'
+    });
+
+    const r = await fetch('/.netlify/functions/cita_list_admin?'+qs, { headers:{ Authorization:'Bearer '+token }});
+    const t = await r.text(); let data=null; try{ data=JSON.parse(t);}catch{}
+    if(!r.ok){ tbody.innerHTML = `<tr><td colspan="6">${data?.error||t||'Error'}</td></tr>`; totalLbl.textContent='—'; return; }
 
     const rows = data.rows || [];
     tbody.innerHTML = '';
     if(!rows.length){
-      tbody.innerHTML = '<tr><td colspan="6" class="text-muted">Sin próximas citas aceptadas</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6" class="text-muted">Sin citas</td></tr>';
     }
     rows.forEach(c=>{
       const tr = document.createElement('tr');
@@ -181,7 +251,9 @@ function statusBadge(e){
         <td>${statusBadge(c.estado)}</td>
         <td class="text-end">
           <div class="btn-group btn-group-sm">
-            <a class="btn btn-outline-primary" href="cita-admin.html?id=${encodeURIComponent(c.id_cita)}"><i class="fa-solid fa-pen-to-square"></i> Editar</a>
+            <a class="btn btn-outline-primary" href="cita-admin.html?id=${encodeURIComponent(c.id_cita)}">
+              <i class="fa-solid fa-pen-to-square"></i> Editar
+            </a>
           </div>
         </td>`;
       tbody.appendChild(tr);
@@ -196,6 +268,24 @@ function statusBadge(e){
   btnBuscar.onclick = ()=>{ page=1; load(); };
   prev.onclick = ()=>{ if(page>1){ page--; load(); } };
   next.onclick = ()=>{ page++; load(); };
+
+  // Cambios que disparan búsqueda
+  [q, pageSize, elFrom, elTo, onlyFuture].forEach(el=>{
+    el.addEventListener('change', ()=>{ page=1; load(); });
+  });
+  estadoChecks.forEach(c=>{
+    c.addEventListener('change', ()=>{ page=1; load(); });
+  });
+
+  // si “solo futuras” está activo, deshabilitar inputs de fecha para claridad
+  function toggleDateInputs(){
+    const dis = onlyFuture.checked;
+    elFrom.disabled = dis;
+    elTo.disabled = dis;
+  }
+  onlyFuture.addEventListener('change', ()=>{ toggleDateInputs(); });
+  toggleDateInputs();
+
   load();
 })();
 </script>
