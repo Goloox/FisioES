@@ -2,7 +2,7 @@
 import { Client } from "pg";
 import jwt from "jsonwebtoken";
 
-// Obtener token desde Authorization: Bearer ... o ?jwt=...
+/* --- helpers --- */
 function getToken(event){
   const h = event.headers || {};
   const q = event.queryStringParameters || {};
@@ -10,74 +10,66 @@ function getToken(event){
   if (ah?.startsWith?.("Bearer ")) return ah.slice(7);
   return q.jwt || null;
 }
-
-// Resolver id de usuario desde los claims; si no hay, intentar por correo
+function deepGet(o, path){
+  try { return path.split(".").reduce((a,k)=> (a==null? a : a[k]), o); } catch { return undefined; }
+}
 async function resolveUserId(client, claims){
-  // 1) Campos típicos de id en el JWT
-  const direct =
-    claims.id ?? claims.user_id ?? claims.sub ?? claims.uid ??
-    claims.usuario_id ?? claims.id_usuario ?? null;
-  if (direct) return Number(direct);
-
-  // 2) Buscar por correo en BD (si viene en el token)
-  const email = claims.email ?? claims.correo ?? claims.mail ?? null;
-  if (email) {
-    const r = await client.query(
-      `SELECT id FROM fisio.usuario WHERE LOWER(correo)=LOWER($1) LIMIT 1`,
-      [String(email)]
-    );
-    if (r.rowCount) return Number(r.rows[0].id);
+  // intenta id en varios campos
+  for (const p of ["id","user_id","usuario_id","id_usuario","sub","uid","user.id","usuario.id"])
+    { const v = deepGet(claims, p); if (v!=null && v!=="") return Number(v); }
+  // intenta por email
+  for (const p of ["email","correo","mail","user.email","usuario.correo"]){
+    const email = deepGet(claims, p);
+    if (email){
+      const r = await client.query(
+        `SELECT id FROM fisio.usuario WHERE LOWER(correo)=LOWER($1) LIMIT 1`, [email]
+      );
+      if (r.rowCount) return Number(r.rows[0].id);
+    }
   }
-
-  // 3) No se pudo resolver
   return null;
 }
 
+/* --- handler --- */
 export const handler = async (event) => {
   const token = getToken(event);
-  if (!token) return { statusCode: 401, body: "Unauthorized" };
+  const debug = (event.queryStringParameters||{}).debug === "1";
+  if (!token) return { statusCode: 401, body: debug ? "Unauthorized: missing token" : "Unauthorized" };
 
   let claims;
   try { claims = jwt.verify(token, process.env.JWT_SECRET); }
-  catch { return { statusCode: 401, body: "Unauthorized" }; }
+  catch (e) { return { statusCode: 401, body: debug ? ("Unauthorized: " + e.message) : "Unauthorized" }; }
 
-  const client = new Client({
-    connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false }
-  });
+  const client = new Client({ connectionString: process.env.DATABASE_URL, ssl:{rejectUnauthorized:false} });
   await client.connect();
-
   try {
-    const me = await resolveUserId(client, claims);
-    if (!me) return { statusCode: 401, body: "Unauthorized" };
+    const userId = await resolveUserId(client, claims);
+    if (!userId) return { statusCode: 401, body: debug ? "Unauthorized: could not resolve user id" : "Unauthorized" };
 
-    // Traer asignaciones y metadatos del video
+    // OJO: v.id_video (no v.id)
     const sql = `
       SELECT
-        va.id,
+        va.id               AS id_asignacion,
         va.id_usuario,
         va.id_video,
         va.observacion,
         va.updated_at,
-        v.id_video AS id_video,
+        v.id_video          AS id_video,
         v.titulo,
         v.objetivo
       FROM fisio.video_asignacion va
-      JOIN fisio.video v
-        ON v.id_video = va.id_video
+      JOIN fisio.video v ON v.id_video = va.id_video
       WHERE va.id_usuario = $1
       ORDER BY va.updated_at DESC NULLS LAST, v.titulo ASC
     `;
-    const r = await client.query(sql, [me]);
+    const r = await client.query(sql, [userId]);
 
     return {
       statusCode: 200,
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type":"application/json" },
       body: JSON.stringify({ rows: r.rows })
     };
   } catch (e) {
     return { statusCode: 500, body: "Error: " + e.message };
-  } finally {
-    try { await client.end(); } catch {}
-  }
+  } finally { try{ await client.end(); }catch{} }
 };
