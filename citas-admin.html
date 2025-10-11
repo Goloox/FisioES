@@ -254,6 +254,10 @@ function todayYMD(){
             <a class="btn btn-outline-primary" href="cita-admin.html?id=${encodeURIComponent(c.id_cita)}">
               <i class="fa-solid fa-pen-to-square"></i> Editar
             </a>
+            <!-- NUEVO: Eliminar al lado de Editar -->
+            <button class="btn btn-outline-dark btn-delete" data-id="${c.id_cita}">
+              <i class="fa-solid fa-trash-can"></i>
+            </button>
           </div>
         </td>`;
       tbody.appendChild(tr);
@@ -269,6 +273,24 @@ function todayYMD(){
   prev.onclick = ()=>{ if(page>1){ page--; load(); } };
   next.onclick = ()=>{ page++; load(); };
 
+  // Delegación: click en Eliminar
+  tbody.addEventListener('click', async (ev)=>{
+    const btn = ev.target.closest('.btn-delete');
+    if(!btn) return;
+    const id = Number(btn.dataset.id);
+    if (!id) return;
+    if (!confirm('¿Eliminar definitivamente esta cita? Esta acción no se puede deshacer.')) return;
+    const res = await fetch('/.netlify/functions/cita_delete', {
+      method:'POST',
+      headers:{ Authorization:'Bearer '+token, 'Content-Type':'application/json' },
+      body: JSON.stringify({ id_cita:id })
+    });
+    const txt = await res.text(); let js=null; try{ js=JSON.parse(txt);}catch{}
+    if(!res.ok){ alert(js?.error||txt||'No se pudo eliminar'); return; }
+    // recargar la página actual manteniendo filtros
+    load();
+  });
+
   // Cambios que disparan búsqueda
   [q, pageSize, elFrom, elTo, onlyFuture].forEach(el=>{
     el.addEventListener('change', ()=>{ page=1; load(); });
@@ -277,7 +299,6 @@ function todayYMD(){
     c.addEventListener('change', ()=>{ page=1; load(); });
   });
 
-  // si “solo futuras” está activo, deshabilitar inputs de fecha para claridad
   function toggleDateInputs(){
     const dis = onlyFuture.checked;
     elFrom.disabled = dis;
