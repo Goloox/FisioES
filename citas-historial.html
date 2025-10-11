@@ -49,6 +49,7 @@
     <small>© <span id="year"></span> FISIOES</small>
   </div>
 </footer>
+
 <script>
 // Convierte "YYYY-MM-DD HH:MM:SS" o "YYYY-MM-DDTHH:MM:SS" (con o sin 'Z')
 // a una fecha local SIN desplazamiento de zona.
@@ -60,7 +61,7 @@ function parseSqlTimestampAsLocal(s) {
   const m = clean.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?/);
   if (!m) return null;
   const [_, yy, MM, dd, hh, mm, ss] = m;
-  // ¡OJO! new Date(año, mesIndex, dia, hora, minuto, segundo) crea fecha LOCAL
+  // new Date(año, mesIndex, dia, hora, minuto, segundo) crea fecha LOCAL
   return new Date(
     Number(yy), Number(MM) - 1, Number(dd),
     Number(hh), Number(mm), Number(ss || 0)
@@ -139,7 +140,7 @@ async function load(){
         <h2 class="accordion-header" id="${hId}">
           <button class="accordion-button ${i? 'collapsed':''}" type="button" data-bs-toggle="collapse" data-bs-target="#${bId}">
             <div class="me-2">${statusBadge(c.estado)}</div>
-            <div class="me-2 badge text-bg-secondary">${new Date(c.fecha).toLocaleString()}</div>
+            <div class="me-2 badge text-bg-secondary">${formatLocal(c.fecha)}</div>
             <strong>${c.titulo}</strong>
           </button>
         </h2>
