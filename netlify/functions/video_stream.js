@@ -1,12 +1,30 @@
-// netlify/functions/video_stream.js
 import { Client } from "pg";
 import { requireUserClaims, readToken } from "./_auth.js";
 
-/*
- Sirve el binario desde fisio.video_archivo (si existe) o,
- si no hay archivo, redirige a v.video_url (si empieza con http/https).
- Requiere estar logueado: acepta Authorization: Bearer ... o ?jwt=...
-*/
+function sniff(buf){
+  if (!buf || buf.length < 4) return "application/octet-stream";
+  if (buf[0]===0x00 && buf[1]===0x00 && buf[2]===0x00 && buf[3]===0x20) return "video/mp4";
+  return "application/octet-stream";
+}
+
+async function trySelectFile(client, id_video){
+  // 1º plural (video_archivos), 2º singular (video_archivo)
+  const variants = [
+    `SELECT archivo, content_type FROM fisio.video_archivos WHERE id_video=$1 ORDER BY created_at DESC LIMIT 1`,
+    `SELECT archivo, content_type FROM fisio.video_archivo  WHERE id_video=$1 ORDER BY created_at DESC LIMIT 1`,
+  ];
+  for (const sql of variants) {
+    try {
+      const r = await client.query(sql, [id_video]);
+      if (r.rowCount) return r.rows[0];
+    } catch (e) {
+      if (!/relation .* does not exist/i.test(e.message)) throw e;
+      // si no existe esa relación, probamos el siguiente variant
+    }
+  }
+  return null;
+}
+
 export const handler = async (event) => {
   const auth = requireUserClaims(event);
   if (!auth.ok) return { statusCode: auth.statusCode, body: auth.error };
@@ -20,35 +38,25 @@ export const handler = async (event) => {
     ssl: { rejectUnauthorized: false }
   });
   await client.connect();
-  try {
-    // 1) ¿Hay archivo subido para el video?
-    const r1 = await client.query(
-      `SELECT archivo, content_type
-         FROM fisio.video_archivo
-        WHERE id_video = $1
-        ORDER BY created_at DESC
-        LIMIT 1`,
-      [id_video]
-    );
 
-    if (r1.rowCount) {
-      // normalizamos buffer
-      const raw = r1.rows[0].archivo;
+  try {
+    // ¿hay archivo subido?
+    const fileRow = await trySelectFile(client, id_video);
+    if (fileRow) {
+      const raw = fileRow.archivo;
       const buf = Buffer.isBuffer(raw)
         ? raw
         : (raw?.type === "Buffer" && Array.isArray(raw?.data))
           ? Buffer.from(raw.data)
-          : typeof raw === "string" && raw.startsWith("\\x")
+          : (typeof raw === "string" && raw.startsWith("\\x"))
             ? Buffer.from(raw.slice(2), "hex")
             : Buffer.from(raw);
-
-      const ct = r1.rows[0].content_type || "application/octet-stream";
+      const ct = fileRow.content_type || sniff(buf);
       return {
         statusCode: 200,
         headers: {
           "Content-Type": ct,
-          "Cache-Control": "private, max-age=300",
-          // evita downloads forzados: que el navegador lo intente reproducir
+          "Cache-Control":"private, max-age=300",
           "Content-Disposition":"inline"
         },
         isBase64Encoded: true,
@@ -56,33 +64,25 @@ export const handler = async (event) => {
       };
     }
 
-    // 2) Si no hay archivo, usamos la URL del video
-    const r2 = await client.query(
-      `SELECT video_url FROM fisio.video WHERE id_video = $1 LIMIT 1`,
+    // si no hay archivo, usamos la URL guardada en fisio.video
+    const rv = await client.query(
+      `SELECT video_url FROM fisio.video WHERE id_video=$1 LIMIT 1`,
       [id_video]
     );
-    if (!r2.rowCount) return { statusCode: 404, body: "No existe el video" };
+    if (!rv.rowCount) return { statusCode: 404, body: "No existe el video" };
 
-    const url = String(r2.rows[0].video_url || "").trim();
+    const url = String(rv.rows[0].video_url || "").trim();
+    if (!url) return { statusCode: 404, body: "Video sin archivo ni URL" };
+
+    // si es URL absoluta http(s), redirigimos
     if (/^https?:\/\//i.test(url)) {
-      // redirigimos al recurso externo
-      return {
-        statusCode: 302,
-        headers: { Location: url }
-      };
+      return { statusCode: 302, headers: { Location: url } };
     }
 
-    // Si la URL almacenada es un path relativo a tu app, añade el JWT para autorización
-    if (url) {
-      const token = readToken(event);
-      const sep = url.includes("?") ? "&" : "?";
-      return {
-        statusCode: 302,
-        headers: { Location: `${url}${sep}jwt=${encodeURIComponent(token||"")}` }
-      };
-    }
-
-    return { statusCode: 404, body: "Video sin archivo ni URL" };
+    // path relativo -> añadimos jwt para que funciones internas autoricen
+    const token = readToken(event) || "";
+    const sep = url.includes("?") ? "&" : "?";
+    return { statusCode: 302, headers: { Location: `${url}${sep}jwt=${encodeURIComponent(token)}` } };
   } catch (e) {
     return { statusCode: 500, body: "Error: " + e.message };
   } finally {
