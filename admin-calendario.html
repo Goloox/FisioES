@@ -31,12 +31,18 @@
       <img src="Img/logo.jpg" alt="FISIOES" style="height:40px;width:40px;border-radius:6px;object-fit:cover;">
       <span class="fw-semibold">FISIOES • Calendario</span>
     </a>
-    <div class="ms-auto d-flex align-items-center gap-2">
-      <a href="homeadmin.html" class="btn btn-outline-light btn-sm"><i class="fa-solid fa-house me-1"></i> Panel</a>
-      <a href="admin-usuarios.html" class="btn btn-outline-primary btn-sm"><i class="fa-solid fa-user-gear me-1"></i> Usuarios</a>
-      <a href="admin-videos.html" class="btn btn-outline-warning btn-sm"><i class="fa-solid fa-circle-plus me-1"></i> Añadir video</a>
-      <a href="admin-videos-asignar.html" class="btn btn-outline-info btn-sm"><i class="fa-solid fa-list-check me-1"></i> Asignar videos</a>
-      <button id="btnLogout" class="btn btn-outline-light btn-sm"><i class="fa-solid fa-right-from-bracket me-1"></i> Salir</button>
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#topNav">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div id="topNav" class="collapse navbar-collapse">
+      <ul class="navbar-nav ms-auto">
+        <li class="nav-item me-2"><a href="homeadmin.html" class="btn btn-outline-light btn-sm w-100 my-1"><i class="fa-solid fa-house me-1"></i> Panel</a></li>
+        <li class="nav-item me-2"><a href="admin-usuarios.html" class="btn btn-outline-primary btn-sm w-100 my-1"><i class="fa-solid fa-user-gear me-1"></i> Usuarios</a></li>
+        <li class="nav-item me-2"><a href="admin-videos.html" class="btn btn-outline-warning btn-sm w-100 my-1"><i class="fa-solid fa-circle-plus me-1"></i> Añadir video</a></li>
+        <li class="nav-item me-2"><a href="admin-videos-asignar.html" class="btn btn-outline-info btn-sm w-100 my-1"><i class="fa-solid fa-list-check me-1"></i> Asignar videos</a></li>
+        <li class="nav-item me-2"><a href="citas-admin.html" class="btn btn-primary btn-sm w-100 my-1"><i class="fa-solid fa-calendar-check me-1"></i> Citas Admin</a></li>
+        <li class="nav-item"><button id="btnLogout" class="btn btn-danger btn-sm w-100 my-1"><i class="fa-solid fa-right-from-bracket me-1"></i> Salir</button></li>
+      </ul>
     </div>
   </div>
 </nav>
@@ -45,9 +51,11 @@
   <div class="d-flex justify-content-between align-items-center mb-3">
     <h1 class="h4 mb-0">Calendario de citas</h1>
     <div class="small">
-      <span class="badge text-bg-warning text-dark me-1">Espera</span>
       <span class="badge text-bg-success me-1">Aceptada</span>
-      <span class="badge text-bg-danger">Cancelada</span>
+      <span class="badge text-bg-warning text-dark me-1">En espera</span>
+      <span class="badge text-bg-secondary me-1">Pospuesto</span>
+      <span class="badge text-bg-danger me-1">Cancelada</span>
+      <span class="badge text-bg-primary">Finalizada</span>
     </div>
   </div>
   <div id="calendar" class="bg-white p-2 rounded-4 shadow-sm"></div>
@@ -65,6 +73,8 @@
         <div id="evtBody" class="small"></div>
       </div>
       <div class="modal-footer">
+        <a id="btnEditar" class="btn btn-outline-secondary" href="#"><i class="fa-solid fa-pen-to-square me-1"></i> Editar</a>
+        <button id="btnPosponer" class="btn btn-outline-secondary"><i class="fa-solid fa-clock-rotate-left me-1"></i> Posponer</button>
         <button id="btnCancelar" class="btn btn-outline-danger"><i class="fa-solid fa-xmark me-1"></i> Cancelar</button>
         <button id="btnAceptar" class="btn btn-success"><i class="fa-solid fa-check me-1"></i> Aceptar</button>
       </div>
@@ -75,6 +85,36 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"></script>
 <script>
+// ===== Helpers de fecha sin corrimiento de zona =====
+function pad(n){ return n<10 ? '0'+n : n; }
+function ymdHisLocal(d){ // YYYY-MM-DD HH:MM:SS (LOCAL)
+  return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate()) +
+         ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+}
+function snapToHour(d){ d.setMinutes(0,0,0); return d; }
+function estadoTexto(n){
+  switch(Number(n)){
+    case 1: return 'Aceptado';
+    case 2: return 'Cancelado';
+    case 3: return 'En espera';
+    case 4: return 'Pospuesto';
+    case 5: return 'Finalizada';
+    default: return '—';
+  }
+}
+function colorByEstado(estado){
+  switch(Number(estado)){
+    case 1: return '#198754'; // success
+    case 2: return '#dc3545'; // danger
+    case 3: return '#ffc107'; // warning
+    case 4: return '#6c757d'; // secondary
+    case 5: return '#0d6efd'; // primary
+    default: return '#0dcaf0'; // info
+  }
+}
+</script>
+
+<script>
 (function(){
   const token = localStorage.getItem('token');
   document.getElementById('btnLogout').addEventListener('click', ()=>{ localStorage.clear(); location.href='login.html'; });
@@ -84,14 +124,10 @@
   const $body  = document.getElementById('evtBody');
   const $btnOk = document.getElementById('btnAceptar');
   const $btnKo = document.getElementById('btnCancelar');
+  const $btnPosp = document.getElementById('btnPosponer');
+  const $btnEdit = document.getElementById('btnEditar');
 
   let currentEvent = null;
-
-  function colorByEstado(estado){
-    if(estado==2) return '#198754'; // success
-    if(estado==3) return '#dc3545'; // danger
-    return '#ffc107'; // warning
-  }
 
   const calendarEl = document.getElementById('calendar');
   const calendar = new FullCalendar.Calendar(calendarEl, {
@@ -105,24 +141,27 @@
     },
     navLinks: true,
     nowIndicator: true,
-    editable: true,          // permitir arrastrar
+    editable: true,
     eventOverlap: true,
+    slotMinTime: '06:00:00',
+    slotMaxTime: '22:00:00',
+    eventDurationEditable: true,
     eventTimeFormat: { hour: '2-digit', minute: '2-digit' },
 
-    // Carga remota con headers
+    // Cargar eventos desde fisio.cita
     events: async (info, success, failure) => {
-      const url = `/.netlify/functions/calendar_events?start=${encodeURIComponent(info.startStr)}&end=${encodeURIComponent(info.endStr)}`;
+      const url = `/.netlify/functions/calendar_events_cita?start=${encodeURIComponent(info.startStr)}&end=${encodeURIComponent(info.endStr)}`;
       try{
-        const r = await fetch(url, { headers:{ Authorization: 'Bearer '+token }});
+        const r = await fetch(url, { headers:{ Authorization:'Bearer '+token }});
+        if(!r.ok){ throw new Error(await r.text()); }
         const data = await r.json();
-        // mapear a eventos con color
-        const events = data.rows.map(e => ({
-          id: String(e.id),
-          title: `${e.titulo} — ${e.cliente}`,
-          start: e.start,
+        const events = (data.rows||[]).map(e => ({
+          id: String(e.id_cita),
+          title: `${e.titulo} — ${e.nombre_completo}`,
+          start: e.start,           // YYYY-MM-DDTHH:mm:00 (local)
           end: e.end || null,
-          backgroundColor: colorByEstado(Number(e.estado)),
-          borderColor: colorByEstado(Number(e.estado)),
+          backgroundColor: colorByEstado(e.estado),
+          borderColor: colorByEstado(e.estado),
           allDay: false,
           extendedProps: e
         }));
@@ -138,47 +177,60 @@
       $title.textContent = arg.event.title;
       $body.innerHTML = `
         <div><strong>Fecha:</strong> ${new Date(arg.event.start).toLocaleString()}</div>
-        <div><strong>Cliente:</strong> ${e.cliente} <code>${e.correo}</code></div>
-        <div><strong>Estado:</strong> ${e.estado==1?'En espera':(e.estado==2?'Aceptado':'Cancelado')}</div>
+        <div><strong>Cliente:</strong> ${e.nombre_completo} <code>${e.correo}</code></div>
+        <div><strong>Estado:</strong> ${estadoTexto(e.estado)}</div>
         <div class="mt-2"><strong>Título:</strong> ${e.titulo}</div>
         <div><strong>Descripción:</strong> ${e.descripcion||'<span class="text-muted">—</span>'}</div>
       `;
-      // botones según estado
-      $btnOk.disabled = (e.estado==2);
-      $btnKo.disabled = (e.estado==3);
+      // botón editar
+      $btnEdit.href = `cita-admin.html?id=${encodeURIComponent(e.id_cita)}`;
+
+      // habilitar/inhabilitar segun estado
+      $btnOk.disabled   = (Number(e.estado) === 1); // si ya está aceptado
+      $btnKo.disabled   = (Number(e.estado) === 2); // si ya está cancelado
+      $btnPosp.disabled = (Number(e.estado) === 4); // si ya está pospuesto
       modal.show();
     },
 
-    // reprogramación por drag & drop
+    // reprogramación por drag & drop (ajusta a HH:00)
     eventDrop: async (info) => {
-      const id = Number(info.event.id);
-      const fecha_iso = info.event.start.toISOString();
-      const ok = confirm('¿Reprogramar esta cita para: ' + new Date(fecha_iso).toLocaleString() + '?');
+      const id_cita = Number(info.event.id);
+      const d = snapToHour(new Date(info.event.start));
+      const fechaLocalStr = ymdHisLocal(d); // local como "YYYY-MM-DD HH:00:00"
+      const ok = confirm('¿Reprogramar esta cita para: ' + d.toLocaleString() + '? (se ajusta a minuto :00)');
       if(!ok){ info.revert(); return; }
-      const r = await fetch('/.netlify/functions/calendar_move', {
+      const r = await fetch('/.netlify/functions/calendar_move_cita', {
         method:'POST',
         headers:{ Authorization:'Bearer '+token, 'Content-Type':'application/json' },
-        body: JSON.stringify({ id_agendar:id, fecha:fecha_iso })
+        body: JSON.stringify({ id_cita, fecha: fechaLocalStr })
       });
-      if(!r.ok){ alert('No se pudo reprogramar'); info.revert(); }
+      if(!r.ok){
+        alert(await r.text() || 'No se pudo reprogramar');
+        info.revert();
+      }else{
+        // refrescar extendedProps.fecha
+        currentEvent = null;
+        calendar.refetchEvents();
+      }
     }
   });
 
-  // acciones modal
   async function setEstado(estado){
     if(!currentEvent) return;
-    const id = Number(currentEvent.id);
-    const r = await fetch('/.netlify/functions/agendar_set_estado', {
+    const id_cita = Number(currentEvent.id);
+    const r = await fetch('/.netlify/functions/cita_set_estado', {
       method:'POST',
       headers:{ Authorization:'Bearer '+token, 'Content-Type':'application/json' },
-      body: JSON.stringify({ id_agendar:id, estado })
+      body: JSON.stringify({ id_cita, estado })
     });
-    if(!r.ok){ alert('No se pudo actualizar'); return; }
+    if(!r.ok){ alert(await r.text() || 'No se pudo actualizar'); return; }
     modal.hide();
     calendar.refetchEvents();
   }
-  $btnOk.addEventListener('click', ()=> setEstado(2));
-  $btnKo.addEventListener('click', ()=> setEstado(3));
+
+  $btnOk.addEventListener('click',   ()=> setEstado(1)); // Aceptado
+  $btnKo.addEventListener('click',   ()=> setEstado(2)); // Cancelado
+  $btnPosp.addEventListener('click', ()=> setEstado(4)); // Pospuesto
 
   calendar.render();
 })();
