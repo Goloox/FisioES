@@ -14,11 +14,13 @@ export const handler = async (event) => {
   const me = Number(claims.id ?? claims.user_id ?? claims.sub);
   if (!me) return { statusCode: 401, body: "Unauthorized" };
 
-  const client = new Client({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized:false } });
+  const client = new Client({
+    connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false }
+  });
   await client.connect();
+
   try {
-    // IMPORTANTE: en tu BD la tabla es fisio.video_asignacion
-    // Ajusta la PK de video según tu esquema: v.id (común) o v.id_video.
     const sql = `
       SELECT
         va.id,
@@ -26,19 +28,20 @@ export const handler = async (event) => {
         va.id_video,
         va.observacion,
         va.updated_at,
-        v.id      AS id_video,              -- si tu PK es id_video, cambia a: v.id_video AS id_video
+        v.id_video           AS id_video,
         v.titulo,
         v.objetivo
       FROM fisio.video_asignacion va
       JOIN fisio.video v
-        ON v.id = va.id_video               -- si tu PK es id_video, cambia a: v.id_video = va.id_video
+        ON v.id_video = va.id_video
       WHERE va.id_usuario = $1
       ORDER BY va.updated_at DESC NULLS LAST, v.titulo ASC
     `;
     const r = await client.query(sql, [me]);
+
     return {
       statusCode: 200,
-      headers: { "Content-Type":"application/json" },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ rows: r.rows })
     };
   } catch (e) {
