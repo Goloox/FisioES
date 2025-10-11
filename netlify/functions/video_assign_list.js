@@ -1,53 +1,69 @@
-// netlify/functions/video_assign_list.js
 import { Client } from "pg";
-import jwt from "jsonwebtoken";
+import { requireUserClaims } from "./_auth.js";
+
+async function queryFirstAvailable(client, variants, params=[]) {
+  let lastErr = null;
+  for (const sql of variants) {
+    try {
+      const r = await client.query(sql, params);
+      return r;
+    } catch (e) {
+      // si la tabla no existe, seguimos probando
+      if (!/relation .* does not exist/i.test(e.message)) throw e;
+      lastErr = e;
+    }
+  }
+  throw lastErr || new Error("No query succeeded");
+}
 
 export const handler = async (event) => {
-  const h = event.headers || {};
-  const auth = h.authorization || h.Authorization || "";
-  if (!auth.startsWith("Bearer ")) return { statusCode: 401, body: "Unauthorized" };
+  const auth = requireUserClaims(event);
+  if (!auth.ok) return { statusCode: auth.statusCode, body: auth.error };
+  const { user_id } = auth.claims;
 
-  let claims;
-  try { claims = jwt.verify(auth.slice(7), process.env.JWT_SECRET); }
-  catch { return { statusCode: 401, body: "Unauthorized" }; }
-
-  const rol = Number(claims.rol_id ?? claims.role_id ?? claims.role ?? claims.rol);
-  const me  = Number(claims.id ?? claims.user_id ?? claims.sub);
-
-  const qs = event.queryStringParameters || {};
-  const id_usuario = Number(qs.id_usuario || 0);
-
-  // Permitir: ADMIN puede ver cualquiera; cliente solo su propio id
-  if (!id_usuario) return { statusCode: 400, body: "id_usuario requerido" };
-  if (rol !== 1 && id_usuario !== me) {
-    return { statusCode: 403, body: "Solo puedes ver tus asignaciones" };
-  }
-
-  const client = new Client({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
+  const client = new Client({
+    connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false }
+  });
   await client.connect();
   try {
-    // Tabla correcta: fisio.video_asignacion (NO video_asignado)
-    const sql = `
+    // Probamos primero tablas en plural (las que muestra tu captura)
+    const variants = [
+      `
       SELECT
         va.id,
-        va.id_usuario,
         va.id_video,
+        va.id_usuario,
+        va.observacion,
+        va.created_at,
+        va.updated_at,
+        v.titulo,
+        v.objetivo
+      FROM fisio.video_asignacions va
+      JOIN fisio.video v ON v.id_video = va.id_video
+      WHERE va.id_usuario = $1
+      ORDER BY COALESCE(va.updated_at, va.created_at) DESC, va.id DESC
+      `,
+      `
+      SELECT
+        va.id,
+        va.id_video,
+        va.id_usuario,
         va.observacion,
         va.created_at,
         va.updated_at,
         v.titulo,
         v.objetivo
       FROM fisio.video_asignacion va
-      JOIN fisio.video v
-        ON v.id = va.id_video     -- ajusta a v.id_video si tu PK es id_video
+      JOIN fisio.video v ON v.id_video = va.id_video
       WHERE va.id_usuario = $1
-      ORDER BY va.updated_at DESC
-    `;
-    const r = await client.query(sql, [id_usuario]);
-
+      ORDER BY COALESCE(va.updated_at, va.created_at) DESC, va.id DESC
+      `
+    ];
+    const r = await queryFirstAvailable(client, variants, [user_id]);
     return {
       statusCode: 200,
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type":"application/json" },
       body: JSON.stringify({ rows: r.rows })
     };
   } catch (e) {
