@@ -12,22 +12,62 @@
   <!-- Estilos -->
   <link rel="stylesheet" href="CSS/style.css">
   <link rel="stylesheet" href="CSS/navbar.css">
+
+  <style>
+    .hero {
+      background-image: url('Img/fisioes.jpg');
+      background-size: cover;
+      background-position: center;
+    }
+    .card-quick {
+      border: 0; border-radius: 1rem;
+      box-shadow: 0 10px 24px rgba(0,0,0,.08);
+    }
+    .text-shadow-sm { text-shadow: 0 1px 2px rgba(0,0,0,.3); }
+    .avatar {
+      width: 42px; height: 42px; border-radius: 50%;
+      object-fit: cover; border: 2px solid rgba(255,255,255,.6);
+      background:#222;
+    }
+  </style>
 </head>
 <body class="bg-light">
 
 <!-- NAVBAR -->
 <nav class="navbar navbar-expand-lg navbar-dark bg-dark sticky-top">
   <div class="container">
-    <a class="navbar-brand" href="index.html">
+    <a class="navbar-brand d-flex align-items-center gap-2" href="homecliente.html">
       <img src="Img/logo.jpg" alt="FISIOES" style="height:40px;width:40px;border-radius:6px;object-fit:cover;">
+      <span class="fw-semibold">FISIOES</span>
     </a>
+
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNavbar">
       <span class="navbar-toggler-icon"></span>
     </button>
+
     <div class="collapse navbar-collapse" id="mainNavbar">
-      <ul class="navbar-nav ms-auto">
+      <ul class="navbar-nav ms-auto align-items-lg-center gap-2">
         <li class="nav-item">
-          <button class="btn btn-danger" id="logoutBtn">
+          <a href="agendar-cita.html" class="btn btn-outline-light btn-sm">
+            <i class="fa-solid fa-calendar-plus me-1"></i> Agendar cita
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="citas-historial.html" class="btn btn-outline-info btn-sm">
+            <i class="fa-solid fa-clock-rotate-left me-1"></i> Historial
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="videos.html" class="btn btn-outline-success btn-sm">
+            <i class="fa-solid fa-video me-1"></i> Videos
+          </a>
+        </li>
+        <li class="nav-item d-flex align-items-center ms-lg-3">
+          <img id="avatarImg" class="avatar me-2" alt="Avatar">
+          <span id="userName" class="text-white-50 small"></span>
+        </li>
+        <li class="nav-item ms-lg-3">
+          <button class="btn btn-danger btn-sm" id="logoutBtn">
             <i class="fa-solid fa-right-from-bracket"></i> Cerrar sesión
           </button>
         </li>
@@ -37,29 +77,85 @@
 </nav>
 
 <!-- HERO -->
-<section class="py-5 text-center text-white"
-         style="background-image:url('Img/fisioes.jpg'); background-size:cover; background-position:center;">
+<section class="py-5 text-center text-white hero">
   <div class="container">
-    <h1 class="display-6 fw-bold text-shadow-sm mb-0">Bienvenido a tu Panel</h1>
-    <p class="lead mt-2">Gestiona tus citas y tu progreso en FISIOES</p>
+    <h1 class="display-6 fw-bold text-shadow-sm mb-1">Tu Panel de Cliente</h1>
+    <p class="lead mb-0 text-shadow-sm">Agenda, revisa tu historial y mira tus videos asignados</p>
   </div>
 </section>
 
 <!-- CONTENIDO -->
-<section class="py-5">
-  <div class="container text-center">
-    <h2 id="bienvenida" class="fw-semibold mb-4"></h2>
-    <p>Aquí podrás ver y gestionar tus <b>citas</b>, <b>videos</b> y <b>progreso</b>.</p>
-    <div class="mt-4">
-      <a href="citas.html" class="btn btn-primary me-2">
-        <i class="fa-solid fa-calendar-check"></i> Mis citas
-      </a>
-      <a href="videos.html" class="btn btn-success">
-        <i class="fa-solid fa-video"></i> Mis videos
-      </a>
+<main class="py-5">
+  <div class="container">
+    <h2 id="bienvenida" class="fw-semibold mb-4 text-center"></h2>
+
+    <div class="row g-4">
+      <!-- Agendar cita -->
+      <div class="col-12 col-md-4">
+        <div class="card card-quick h-100">
+          <div class="card-body p-4 d-flex flex-column">
+            <div class="d-flex align-items-center mb-3">
+              <div class="bg-primary text-white p-3 rounded-3 me-3">
+                <i class="fa-solid fa-calendar-plus fa-lg"></i>
+              </div>
+              <div>
+                <h5 class="mb-0">Agendar cita</h5>
+                <small class="text-muted">Reserva tu próxima sesión</small>
+              </div>
+            </div>
+            <p class="text-muted flex-grow-1">Elige fecha, hora y agrega una breve descripción de tu caso.</p>
+            <a href="agendar-cita.html" class="btn btn-primary w-100 mt-auto">
+              Ir a agendar
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <!-- Ver historial -->
+      <div class="col-12 col-md-4">
+        <div class="card card-quick h-100">
+          <div class="card-body p-4 d-flex flex-column">
+            <div class="d-flex align-items-center mb-3">
+              <div class="bg-info text-white p-3 rounded-3 me-3">
+                <i class="fa-solid fa-clock-rotate-left fa-lg"></i>
+              </div>
+              <div>
+                <h5 class="mb-0">Ver historial</h5>
+                <small class="text-muted">Consulta tus citas y estados</small>
+              </div>
+            </div>
+            <p class="text-muted flex-grow-1">Revisa el estado: Aceptada, En espera, Pospuesta, Cancelada o Finalizada.</p>
+            <a href="citas-historial.html" class="btn btn-info text-white w-100 mt-auto">
+              Ver historial
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <!-- Ver videos -->
+      <div class="col-12 col-md-4">
+        <div class="card card-quick h-100">
+          <div class="card-body p-4 d-flex flex-column">
+            <div class="d-flex align-items-center mb-3">
+              <div class="bg-success text-white p-3 rounded-3 me-3">
+                <i class="fa-solid fa-video fa-lg"></i>
+              </div>
+              <div>
+                <h5 class="mb-0">Ver videos</h5>
+                <small class="text-muted">Rutinas/ejercicios asignados</small>
+              </div>
+            </div>
+            <p class="text-muted flex-grow-1">Accede a los videos y observaciones que tu fisioterapeuta te asignó.</p>
+            <a href="videos.html" class="btn btn-success w-100 mt-auto">
+              Ir a videos
+            </a>
+          </div>
+        </div>
+      </div>
     </div>
+
   </div>
-</section>
+</main>
 
 <!-- FOOTER -->
 <footer class="footer py-3 border-top">
@@ -72,15 +168,33 @@
   // Año dinámico
   document.getElementById('year').textContent = new Date().getFullYear();
 
-  // Verificar sesión
+  // --- Sesión y datos de usuario ---
   const token = localStorage.getItem('token');
-  const usuario = localStorage.getItem('usuario');
+  // Acepta 'user' (admin usa eso) o 'usuario' (cliente)
+  const rawUser = localStorage.getItem('usuario') || localStorage.getItem('user');
 
-  if (!token || !usuario) {
+  if (!token || !rawUser) {
     window.location.href = "login.html";
-  } else {
-    const user = JSON.parse(usuario);
-    document.getElementById('bienvenida').textContent = "Hola, " + user.nombre_completo;
+  }
+
+  let user = {};
+  try { user = JSON.parse(rawUser || "{}"); } catch { user = {}; }
+
+  // Si accidentalmente es admin, reubica al panel admin
+  if (Number(user.rol_id) === 1) {
+    window.location.href = "Default.html";
+  }
+
+  // Saludo + nombre
+  document.getElementById('bienvenida').textContent = "Hola, " + (user.nombre_completo || "Cliente");
+  document.getElementById('userName').textContent = user.nombre_completo || "Cliente";
+
+  // Avatar (si tienes función serverless de avatar similar a admin)
+  const avatarImg = document.getElementById('avatarImg');
+  if (avatarImg) {
+    const FALLBACK = 'Img/default-avatar.png';
+    avatarImg.src = '/.netlify/functions/avatar?usuario_id=' + encodeURIComponent(user.id || user.usuario_id || '') + '&jwt=' + encodeURIComponent(token);
+    avatarImg.onerror = () => { avatarImg.src = FALLBACK; };
   }
 
   // Cerrar sesión
