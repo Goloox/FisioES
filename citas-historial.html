@@ -199,7 +199,45 @@ async function load(){
 }
 
 load();
+
+
+  // Handlers cancelar/posponer/eliminar
+  wrap.querySelectorAll('[data-action]').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const id = Number(btn.dataset.id);
+      const action = btn.dataset.action;
+
+      if (action === 'eliminar') {
+        if (!confirm('¿Eliminar definitivamente esta cita? Esta acción no se puede deshacer.')) return;
+        const res = await fetch('/.netlify/functions/cita_delete', {
+          method:'POST',
+          headers:{ 'Authorization':'Bearer '+token, 'Content-Type':'application/json' },
+          body: JSON.stringify({ id_cita:id })
+        });
+        const txt = await res.text(); let js=null; try{ js=JSON.parse(txt);}catch{}
+        if(!res.ok){ alert(js?.error||txt||'No se pudo eliminar'); return; }
+        load();
+        return;
+      }
+
+      // mantener lo que ya tenías:
+      const estado = (action==='cancelar') ? 2 : 4; // cancelar=2, posponer=4
+      if (estado===2 && !confirm('¿Cancelar esta cita?')) return;
+      if (estado===4 && !confirm('¿Solicitar posponer esta cita?')) return;
+      const res = await fetch('/.netlify/functions/cita_set_estado', {
+        method:'POST',
+        headers:{ 'Authorization':'Bearer '+token, 'Content-Type':'application/json' },
+        body: JSON.stringify({ id_cita:id, estado })
+      });
+      const tt = await res.text(); let dd=null; try{ dd=JSON.parse(tt);}catch{}
+      if(!res.ok){ alert(dd?.error||tt||'No se pudo actualizar'); return; }
+      load();
+    });
+  });
+
+  // ... (código existente abajo)
 </script>
+
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
