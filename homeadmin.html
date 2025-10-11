@@ -109,7 +109,7 @@
         </div>
       </div>
 
-      <!-- PENDIENTES (desde fisio.cita) -->
+      <!-- PENDIENTES -->
       <div class="card border-0 shadow-sm rounded-4 mb-4">
         <div class="card-body">
           <div class="d-flex justify-content-between align-items-center mb-2">
@@ -152,10 +152,10 @@
         </div>
       </div>
 
-      <!-- Citas -->
+      <!-- Citas aceptadas y futuras -->
       <div class="card border-0 shadow-sm rounded-4">
         <div class="card-body">
-          <h3 class="h6 mb-2">Citas</h3>
+          <h3 class="h6 mb-2">Próximas citas aceptadas</h3>
           <div id="citasWrap"><div class="text-muted">Selecciona un usuario…</div></div>
         </div>
       </div>
@@ -173,7 +173,7 @@
 </div>
 
 <script>
-// ===== Helpers para fechas SIN corrimiento de zona =====
+/* ===== Helpers para fechas SIN corrimiento de zona ===== */
 function parseSqlTimestampAsLocal(s) {
   if (!s || typeof s !== 'string') return null;
   const clean = s.replace('Z','').replace(' ', 'T');
@@ -280,7 +280,7 @@ function formatLocal(sqlTs, withSeconds = false) {
   uprev.addEventListener('click', ()=>{ if(upage>1){ upage--; loadUsers(); }});
   unext.addEventListener('click', ()=>{ upage++; loadUsers(); });
 
-  // ---------- PENDIENTES (desde fisio.cita) ----------
+  // ---------- PENDIENTES ----------
   const pendBody  = document.getElementById('pendBody');
   const pendTotal = document.getElementById('pendTotal');
 
@@ -354,9 +354,9 @@ function formatLocal(sqlTs, withSeconds = false) {
   }
 
   async function setEstado(id_cita, estado){
-    if (estado === 2 && !confirm('¿Cancelar esta cita?')) return;   // Cancelar
-    if (estado === 4 && !confirm('¿Posponer esta cita?')) return;   // Posponer
-    if (estado === 5 && !confirm('¿Marcar como FINALIZADA?')) return; // Finalizar
+    if (estado === 2 && !confirm('¿Cancelar esta cita?')) return;
+    if (estado === 4 && !confirm('¿Posponer esta cita?')) return;
+    if (estado === 5 && !confirm('¿Marcar como FINALIZADA?')) return;
 
     const r = await fetch('/.netlify/functions/cita_set_estado', {
       method:'POST',
@@ -424,6 +424,7 @@ function formatLocal(sqlTs, withSeconds = false) {
     }
   }
 
+  // ----- SOLO citas aceptadas y futuras -----
   async function loadCitas(idUsuario){
     const wrap = document.getElementById('citasWrap');
     wrap.innerHTML = '<div class="text-muted">Cargando…</div>';
@@ -431,13 +432,31 @@ function formatLocal(sqlTs, withSeconds = false) {
       const r = await fetch('/.netlify/functions/citas_list?id_cliente='+idUsuario, { headers:{ Authorization:'Bearer '+token }});
       const {ok, data, text} = await readJsonOrText(r);
       if(!ok){ wrap.innerHTML = `<div>${data?.error||text||'Error'}</div>`; return; }
-      if(!data.rows.length){ wrap.innerHTML = '<div class="text-muted">Sin citas</div>'; return; }
+
+      const rows = Array.isArray(data?.rows) ? data.rows : [];
+      const now = new Date();
+      const upcoming = rows
+        .filter(c => Number(c.estado) === 1)
+        .filter(c => {
+          const d = parseSqlTimestampAsLocal(c.fecha);
+          return d && d.getTime() >= now.getTime();
+        })
+        .sort((a,b) => {
+          const da = parseSqlTimestampAsLocal(a.fecha).getTime();
+          const db = parseSqlTimestampAsLocal(b.fecha).getTime();
+          return da - db;
+        });
+
+      if(!upcoming.length){
+        wrap.innerHTML = '<div class="text-muted">Sin próximas citas aceptadas</div>';
+        return;
+      }
 
       const acc = document.createElement('div');
       acc.className = 'accordion';
       acc.id = 'accordionCitas';
 
-      data.rows.forEach((c,i)=>{
+      upcoming.forEach((c,i)=>{
         const item = document.createElement('div');
         item.className = 'accordion-item';
         const hId = 'h'+c.id_cita, bId = 'b'+c.id_cita;
