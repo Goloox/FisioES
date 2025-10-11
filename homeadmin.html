@@ -42,9 +42,8 @@
       <a href="admin-videos.html" class="btn btn-outline-warning btn-sm"><i class="fa-solid fa-circle-plus me-1"></i> Añadir video</a>
       <a href="admin-videos-asignar.html" class="btn btn-outline-info btn-sm"><i class="fa-solid fa-list-check me-1"></i> Asignar videos</a>
       <a href="admin-calendario.html" class="btn btn-outline-light btn-sm">
-  <i class="fa-solid fa-calendar-days me-1"></i> Calendario
-</a>
-
+        <i class="fa-solid fa-calendar-days me-1"></i> Calendario
+      </a>
       <a href="profile.html" class="btn btn-outline-secondary btn-sm"><i class="fa-solid fa-id-badge me-1"></i> Perfil</a>
       <button id="btnLogout" class="btn btn-outline-light btn-sm"><i class="fa-solid fa-right-from-bracket me-1"></i> Salir</button>
     </div>
@@ -110,7 +109,7 @@
         </div>
       </div>
 
-      <!-- PENDIENTES de agendar_cita -->
+      <!-- PENDIENTES (desde fisio.cita) -->
       <div class="card border-0 shadow-sm rounded-4 mb-4">
         <div class="card-body">
           <div class="d-flex justify-content-between align-items-center mb-2">
@@ -172,6 +171,30 @@
     </div>
   </div>
 </div>
+
+<script>
+// ===== Helpers para fechas SIN corrimiento de zona =====
+function parseSqlTimestampAsLocal(s) {
+  if (!s || typeof s !== 'string') return null;
+  const clean = s.replace('Z','').replace(' ', 'T');
+  const m = clean.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?/);
+  if (!m) return null;
+  const [_, yy, MM, dd, hh, mm, ss] = m;
+  return new Date(
+    Number(yy), Number(MM) - 1, Number(dd),
+    Number(hh), Number(mm), Number(ss || 0)
+  );
+}
+function formatLocal(sqlTs, withSeconds = false) {
+  const d = parseSqlTimestampAsLocal(sqlTs);
+  if (!d) return sqlTs || '-';
+  return d.toLocaleString(undefined, {
+    year:'numeric', month:'2-digit', day:'2-digit',
+    hour:'2-digit', minute:'2-digit', ...(withSeconds?{second:'2-digit'}:{}),
+    hour12:true
+  });
+}
+</script>
 
 <script>
 (function(){
@@ -276,7 +299,7 @@
       data.rows.forEach(p=>{
         const tr = document.createElement('tr');
         tr.innerHTML = `
-          <td>${new Date(p.fecha).toLocaleString()}</td>
+          <td>${formatLocal(p.fecha)}</td>
           <td>${p.nombre_completo}</td>
           <td><code>${p.correo}</code></td>
           <td>${p.titulo}</td>
@@ -344,7 +367,6 @@
     if(!ok){ alert(data?.error||text||'No se pudo actualizar'); return; }
 
     await loadPendientes();
-    // si estoy mirando ese usuario, refresco sus citas
     if (selectedUser && Number(data?.row?.usuario_id) === Number(selectedUser.id)) {
       loadCitas(selectedUser.id);
     }
@@ -366,7 +388,7 @@
       <span class="me-3"><i class="fa-solid fa-envelope me-1"></i>${u.correo}</span>
       <span class="me-3"><i class="fa-solid fa-id-card me-1"></i>${u.cedula||'-'}</span>
       <span class="me-3"><i class="fa-solid fa-user-shield me-1"></i>${u.rol_id===1?'ADMIN':'CLIENTE'}</span>
-      <span><i class="fa-regular fa-clock me-1"></i>Creado: ${u.created_at ? new Date(u.created_at).toLocaleString() : '-'}</span>
+      <span><i class="fa-regular fa-clock me-1"></i>Creado: ${u.created_at ? formatLocal(u.created_at, true) : '-'}</span>
     `;
     uEstado.className = 'badge '+(u.activo===1?'text-bg-success':'text-bg-secondary');
     uEstado.textContent = u.activo===1?'Activo':'Inactivo';
@@ -394,7 +416,7 @@
           <td>${a.objetivo}</td>
           <td><a class="btn btn-sm btn-outline-primary" target="_blank" href="${url}"><i class="fa-solid fa-play me-1"></i> Ver</a></td>
           <td>${a.observacion||''}</td>
-          <td>${new Date(a.updated_at).toLocaleString()}</td>`;
+          <td>${formatLocal(a.updated_at, true)}</td>`;
         tbody.appendChild(tr);
       });
     }catch{
@@ -423,7 +445,7 @@
           <h2 class="accordion-header" id="${hId}">
             <button class="accordion-button ${i? 'collapsed':''}" type="button" data-bs-toggle="collapse" data-bs-target="#${bId}">
               <div class="me-2">${statusBadge(c.estado)}</div>
-              <div class="me-2 badge text-bg-secondary">${new Date(c.fecha).toLocaleString()}</div>
+              <div class="me-2 badge text-bg-secondary">${formatLocal(c.fecha)}</div>
               <strong>${c.titulo}</strong>
             </button>
           </h2>
