@@ -197,6 +197,17 @@
     return { ok:res.ok, status:res.status, data:d, text:t };
   }
 
+  function statusBadge(e){
+    switch (Number(e)) {
+      case 1: return '<span class="badge text-bg-success">Aceptado</span>';
+      case 2: return '<span class="badge text-bg-danger">Cancelado</span>';
+      case 3: return '<span class="badge text-bg-warning text-dark">En espera</span>';
+      case 4: return '<span class="badge text-bg-secondary">Pospuesto</span>';
+      case 5: return '<span class="badge text-bg-primary">Finalizada</span>';
+      default: return '<span class="badge text-bg-light text-dark">—</span>';
+    }
+  }
+
   // ---------- LISTA USUARIOS ----------
   const utbody   = document.getElementById('utbody');
   const uq       = document.getElementById('uq');
@@ -229,7 +240,6 @@
         tr.addEventListener('click', ()=>{ selectUser(u); utbody.querySelectorAll('tr').forEach(r=>r.classList.remove('table-active')); tr.classList.add('table-active'); });
         utbody.appendChild(tr);
       });
-      // autoselect si viene de "Ver usuario" en pendientes
       if (autoSelectEmail) {
         const tr = [...utbody.querySelectorAll('tr')].find(x => x.dataset.email === autoSelectEmail);
         if (tr) tr.click();
@@ -247,20 +257,14 @@
   uprev.addEventListener('click', ()=>{ if(upage>1){ upage--; loadUsers(); }});
   unext.addEventListener('click', ()=>{ upage++; loadUsers(); });
 
-  // ---------- PENDIENTES ----------
+  // ---------- PENDIENTES (desde fisio.cita) ----------
   const pendBody  = document.getElementById('pendBody');
   const pendTotal = document.getElementById('pendTotal');
-
-  function badgeEstado(e){
-    if(e===2) return '<span class="badge text-bg-success">Aceptado</span>';
-    if(e===3) return '<span class="badge text-bg-danger">Cancelado</span>';
-    return '<span class="badge text-bg-warning text-dark">En espera</span>';
-  }
 
   async function loadPendientes(){
     pendBody.innerHTML = '<tr><td colspan="6" class="text-muted">Cargando…</td></tr>';
     try{
-      const r = await fetch('/.netlify/functions/agendar_list_pending?page=1&pageSize=50', { headers:{ Authorization:'Bearer '+token }});
+      const r = await fetch('/.netlify/functions/cita_list_pending?page=1&pageSize=50', { headers:{ Authorization:'Bearer '+token }});
       const {ok, data, text} = await readJsonOrText(r);
       if(!ok){ pendBody.innerHTML = `<tr><td colspan="6">${data?.error||text||'Error'}</td></tr>`; pendTotal.textContent='—'; return; }
       pendBody.innerHTML = '';
@@ -276,20 +280,39 @@
           <td>${p.nombre_completo}</td>
           <td><code>${p.correo}</code></td>
           <td>${p.titulo}</td>
-          <td>${badgeEstado(Number(p.estado))}</td>
+          <td>${statusBadge(p.estado)}</td>
           <td class="text-end">
             <button class="btn btn-sm btn-outline-secondary me-1 ver-usuario" data-email="${p.correo}"><i class="fa-solid fa-user"></i></button>
-            <button class="btn btn-sm btn-success me-1 btn-aceptar" data-id="${p.id}"><i class="fa-solid fa-check"></i> Aceptar</button>
-            <button class="btn btn-sm btn-outline-danger btn-cancelar" data-id="${p.id}"><i class="fa-solid fa-xmark"></i> Cancelar</button>
+
+            <button class="btn btn-sm btn-success me-1 btn-estado" data-id="${p.id_cita}" data-estado="1">
+              <i class="fa-solid fa-check"></i> Aceptar
+            </button>
+
+            <button class="btn btn-sm btn-outline-warning me-1 btn-estado" data-id="${p.id_cita}" data-estado="3">
+              <i class="fa-solid fa-hourglass-half"></i> En espera
+            </button>
+
+            <button class="btn btn-sm btn-outline-secondary me-1 btn-estado" data-id="${p.id_cita}" data-estado="4">
+              <i class="fa-solid fa-clock-rotate-left"></i> Posponer
+            </button>
+
+            <button class="btn btn-sm btn-outline-danger btn-estado" data-id="${p.id_cita}" data-estado="2">
+              <i class="fa-solid fa-xmark"></i> Cancelar
+            </button>
+
+            <button class="btn btn-sm btn-outline-primary ms-1 btn-estado" data-id="${p.id_cita}" data-estado="5">
+              <i class="fa-solid fa-flag-checkered"></i> Finalizar
+            </button>
           </td>`;
         pendBody.appendChild(tr);
       });
 
-      pendBody.querySelectorAll('.btn-aceptar').forEach(b=>{
-        b.addEventListener('click', ()=> setEstado(Number(b.dataset.id), 2));
-      });
-      pendBody.querySelectorAll('.btn-cancelar').forEach(b=>{
-        b.addEventListener('click', ()=> setEstado(Number(b.dataset.id), 3));
+      pendBody.querySelectorAll('.btn-estado').forEach(b=>{
+        b.addEventListener('click', ()=>{
+          const id_cita = Number(b.dataset.id);
+          const estado  = Number(b.dataset.estado); // 1..5
+          setEstado(id_cita, estado);
+        });
       });
       pendBody.querySelectorAll('.ver-usuario').forEach(b=>{
         b.addEventListener('click', ()=>{
@@ -297,7 +320,6 @@
           autoSelectEmail = b.dataset.email;
           upage = 1;
           loadUsers();
-          // desplaza vista hacia la lista
           document.querySelector('.row-selectable').scrollIntoView({behavior:'smooth', block:'start'});
         });
       });
@@ -308,18 +330,22 @@
     }
   }
 
-  async function setEstado(id_agendar, estado){
-    if(estado===3 && !confirm('¿Cancelar esta cita?')) return;
-    const r = await fetch('/.netlify/functions/agendar_set_estado', {
+  async function setEstado(id_cita, estado){
+    if (estado === 2 && !confirm('¿Cancelar esta cita?')) return;   // Cancelar
+    if (estado === 4 && !confirm('¿Posponer esta cita?')) return;   // Posponer
+    if (estado === 5 && !confirm('¿Marcar como FINALIZADA?')) return; // Finalizar
+
+    const r = await fetch('/.netlify/functions/cita_set_estado', {
       method:'POST',
       headers:{ Authorization:'Bearer '+token, 'Content-Type':'application/json' },
-      body: JSON.stringify({ id_agendar, estado })
+      body: JSON.stringify({ id_cita, estado })
     });
     const {ok, data, text} = await readJsonOrText(r);
     if(!ok){ alert(data?.error||text||'No se pudo actualizar'); return; }
+
     await loadPendientes();
     // si estoy mirando ese usuario, refresco sus citas
-    if (selectedUser && Number(data?.row?.id_cliente) === Number(selectedUser.id)) {
+    if (selectedUser && Number(data?.row?.usuario_id) === Number(selectedUser.id)) {
       loadCitas(selectedUser.id);
     }
   }
@@ -376,12 +402,6 @@
     }
   }
 
-  function estadoBadge(e){
-    if(e===2) return '<span class="badge text-bg-success">Aceptado</span>';
-    if(e===3) return '<span class="badge text-bg-danger">Cancelado</span>';
-    return '<span class="badge text-bg-warning text-dark">En espera</span>';
-  }
-
   async function loadCitas(idUsuario){
     const wrap = document.getElementById('citasWrap');
     wrap.innerHTML = '<div class="text-muted">Cargando…</div>';
@@ -402,7 +422,7 @@
         item.innerHTML = `
           <h2 class="accordion-header" id="${hId}">
             <button class="accordion-button ${i? 'collapsed':''}" type="button" data-bs-toggle="collapse" data-bs-target="#${bId}">
-              <div class="me-2">${estadoBadge(Number(c.estado))}</div>
+              <div class="me-2">${statusBadge(c.estado)}</div>
               <div class="me-2 badge text-bg-secondary">${new Date(c.fecha).toLocaleString()}</div>
               <strong>${c.titulo}</strong>
             </button>
@@ -441,6 +461,7 @@
   loadPendientes();
 })();
 </script>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
